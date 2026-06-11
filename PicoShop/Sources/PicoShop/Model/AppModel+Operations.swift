@@ -1,0 +1,656 @@
+import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
+
+// MARK: - ドキュメント / レイヤー / 選択 / 編集の操作
+
+extension AppModel {
+
+    // MARK: 新規ドキュメント
+
+    func newDocument(width: Int, height: Int, background: PixelColor) {
+        pushUndo("新規ファイル")
+        canvasWidth = max(1, width)
+        canvasHeight = max(1, height)
+        let layer = Layer(name: "レイヤー1",
+                          buffer: PixelBuffer(width: canvasWidth, height: canvasHeight, fill: background))
+        layers = [layer]
+        activeLayerID = layer.id
+        selection = nil
+        pendingTransform = SelectionTransform()
+        projectURL = nil
+        recomposite()
+        fitToView()
+    }
+
+    // MARK: 画像ファイルの読み込み（新規レイヤーとして追加）
+
+    /// 初回（レイヤーが空 or 全レイヤーが空白 1 枚のみ）ならキャンバスサイズを画像に合わせる
+    func openImageFiles(_ urls: [URL]) {
+        var added = false
+        let pristine = isPristine  // pushUndo の前に判定（undoStack を見るため）
+        for url in urls {
+            guard let img = NSImage(contentsOf: url),
+                  let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil),
+                  let buf = PixelBuffer(cgImage: cg) else {
+                warn("読み込めませんでした: \(url.lastPathComponent)")
+                continue
+            }
+            if !added { pushUndo("ファイルを開く") }
+            if pristine && !added {
+                canvasWidth = buf.width
+                canvasHeight = buf.height
+                layers = []
+            }
+            let layer = Layer(name: url.deletingPathExtension().lastPathComponent, buffer: buf)
+            layers.insert(layer, at: 0)
+            activeLayerID = layer.id
+            added = true
+        }
+        if added {
+            recomposite()
+            fitToView()
+        }
+    }
+
+    /// まだ何も編集していない初期状態か（空白レイヤー 1 枚のみ）
+    private var isPristine: Bool {
+        layers.count <= 1 && undoStack.isEmpty
+            && (layers.first?.buffer.pixels.allSatisfy { $0 == 0 } ?? true)
+    }
+
+    // MARK: レイヤー操作
+
+    func addEmptyLayer() {
+        pushUndo("新規レイヤー")
+        let layer = Layer(name: "レイヤー\(layers.count + 1)",
+                          buffer: PixelBuffer(width: canvasWidth, height: canvasHeight))
+        layers.insert(layer, at: activeLayerIndex ?? 0)
+        activeLayerID = layer.id
+        recomposite()
+    }
+
+    func addLayerFromFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg, .tiff, .bmp]
+        panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK else { return }
+        var added = false
+        for url in panel.urls {
+            guard let img = NSImage(contentsOf: url),
+                  let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil),
+                  let buf = PixelBuffer(cgImage: cg) else { continue }
+            if !added { pushUndo("ファイルから読み込み") }
+            let layer = Layer(name: url.deletingPathExtension().lastPathComponent, buffer: buf)
+            layers.insert(layer, at: 0)
+            activeLayerID = layer.id
+            added = true
+        }
+        if added { recomposite() }
+    }
+
+    func deleteActiveLayer() {
+        guard layers.count > 1 else {
+            warn("最後のレイヤーは削除できません")
+            return
+        }
+        guard let idx = activeLayerIndex else { return }
+        if layers[idx].locked {
+            warn("レイヤーがロックされています")
+            return
+        }
+        pushUndo("レイヤーを削除")
+        layers.remove(at: idx)
+        activeLayerID = layers[min(idx, layers.count - 1)].id
+        recomposite()
+    }
+
+    func duplicateActiveLayer() {
+        guard let idx = activeLayerIndex else { return }
+        pushUndo("レイヤーを複製")
+        var copy = Layer(name: layers[idx].name + " コピー", buffer: layers[idx].buffer,
+                         offsetX: layers[idx].offsetX, offsetY: layers[idx].offsetY)
+        copy.opacity = layers[idx].opacity
+        copy.blend = layers[idx].blend
+        layers.insert(copy, at: idx)
+        activeLayerID = copy.id
+        recomposite()
+    }
+
+    /// up=true で 1 つ上（手前）へ
+    func moveActiveLayer(up: Bool) {
+        guard let idx = activeLayerIndex else { return }
+        let newIdx = up ? idx - 1 : idx + 1
+        guard newIdx >= 0, newIdx < layers.count else { return }
+        pushUndo("レイヤーの並び替え")
+        layers.swapAt(idx, newIdx)
+        recomposite()
+    }
+
+    func reorderLayers(fromOffsets: IndexSet, toOffset: Int) {
+        pushUndo("レイヤーの並び替え")
+        layers.move(fromOffsets: fromOffsets, toOffset: toOffset)
+        recomposite()
+    }
+
+    /// 表示中のレイヤーをすべて 1 つに統合（非表示レイヤーは残す）
+    func mergeVisibleLayers() {
+        let visible = layers.filter { $0.visible }
+        guard visible.count >= 2 else {
+            warn("統合できる表示レイヤーが 2 つ以上ありません")
+            return
+        }
+        if visible.contains(where: { $0.locked }) {
+            warn("ロック中のレイヤーが含まれています")
+            return
+        }
+        pushUndo("レイヤーを統合")
+        var bounds = visible[0].frame
+        for l in visible.dropFirst() { bounds = bounds.union(l.frame) }
+        bounds = CGRect(x: bounds.minX.rounded(.down), y: bounds.minY.rounded(.down),
+                        width: bounds.width.rounded(.up), height: bounds.height.rounded(.up))
+        guard let img = Compositor.composite(layers: visible, bounds: bounds),
+              let buf = PixelBuffer(cgImage: img) else { return }
+        let merged = Layer(name: "統合レイヤー", buffer: buf,
+                           offsetX: Int(bounds.minX), offsetY: Int(bounds.minY))
+        let topIdx = layers.firstIndex { $0.visible } ?? 0
+        layers.removeAll { $0.visible }
+        layers.insert(merged, at: min(topIdx, layers.count))
+        activeLayerID = merged.id
+        recomposite()
+    }
+
+    // MARK: レイヤープロパティ（パレットから）
+
+    func updateLayer(_ id: UUID, _ body: (inout Layer) -> Void) {
+        guard let idx = layers.firstIndex(where: { $0.id == id }) else { return }
+        body(&layers[idx])
+        recomposite()
+    }
+
+    // MARK: キャンバス操作
+
+    /// anchor: 0–8（3×3 グリッド、0=左上, 4=中央, 8=右下）
+    func resizeCanvas(width: Int, height: Int, anchor: Int) {
+        let w = max(1, width), h = max(1, height)
+        pushUndo("キャンバスサイズ変更")
+        let ax = Double(anchor % 3) / 2.0   // 0, 0.5, 1
+        let ay = Double(anchor / 3) / 2.0
+        let dx = Int((Double(w - canvasWidth) * ax).rounded())
+        let dy = Int((Double(h - canvasHeight) * ay).rounded())
+        for i in layers.indices {
+            layers[i].offsetX += dx
+            layers[i].offsetY += dy
+        }
+        if let sel = selection {
+            var newSel = SelectionMask(width: w, height: h)
+            for y in 0..<sel.height {
+                let ny = y + dy
+                guard ny >= 0, ny < h else { continue }
+                for x in 0..<sel.width {
+                    let nx = x + dx
+                    guard nx >= 0, nx < w else { continue }
+                    newSel.data[ny * w + nx] = sel.data[y * sel.width + x]
+                }
+            }
+            selection = newSel.isEmpty ? nil : newSel
+        }
+        canvasWidth = w
+        canvasHeight = h
+        recomposite()
+    }
+
+    /// 全表示レイヤーの結合範囲でキャンバスを自動リサイズ
+    func fitCanvasToLayers() {
+        let visible = layers.filter { $0.visible }
+        guard !visible.isEmpty else { return }
+        var bounds = visible[0].frame
+        for l in visible.dropFirst() { bounds = bounds.union(l.frame) }
+        pushUndo("キャンバスを画像に合わせる")
+        let ox = Int(bounds.minX.rounded(.down)), oy = Int(bounds.minY.rounded(.down))
+        for i in layers.indices {
+            layers[i].offsetX -= ox
+            layers[i].offsetY -= oy
+        }
+        canvasWidth = Int(bounds.width.rounded(.up))
+        canvasHeight = Int(bounds.height.rounded(.up))
+        selection = nil
+        recomposite()
+    }
+
+    /// アクティブレイヤーを透明でクリア（選択がある場合は選択範囲のみ）
+    func clearActiveLayerTransparent() {
+        pushUndo("透明でクリア")
+        if selection != nil {
+            cutSelection()
+            return
+        }
+        let ok = withActiveLayer { l in
+            l.buffer = PixelBuffer(width: l.buffer.width, height: l.buffer.height)
+            l.refreshCache()
+        }
+        if ok { recomposite() }
+    }
+
+    // MARK: 選択操作
+
+    func setSelection(_ mask: SelectionMask?, label: String) {
+        pushUndo(label)
+        selection = (mask?.isEmpty ?? true) ? nil : mask
+        pendingTransform = SelectionTransform()
+    }
+
+    /// selectionOperationMode に従って選択を適用（新規/追加/除外）
+    func applySelection(_ mask: SelectionMask, label: String) {
+        let result: SelectionMask
+        switch selectionOperationMode {
+        case .replace:
+            result = mask
+        case .add:
+            result = (selection ?? SelectionMask(width: mask.width, height: mask.height)).union(mask)
+        case .subtract:
+            guard let existing = selection else { return }
+            result = existing.subtracting(mask)
+        }
+        setSelection(result, label: label)
+    }
+
+    func selectAll() {
+        setSelection(.all(width: canvasWidth, height: canvasHeight), label: "すべてを選択")
+    }
+
+    func invertSelection() {
+        guard let sel = selection else {
+            warn("選択範囲がありません")
+            return
+        }
+        setSelection(sel.inverted(), label: "選択を反転")
+    }
+
+    func clearSelection() {
+        guard selection != nil else { return }
+        pushUndo("選択をクリア")
+        selection = nil
+        pendingTransform = SelectionTransform()
+    }
+
+    func growSelection(by px: Int) {
+        guard let sel = selection else {
+            warn("選択範囲がありません")
+            return
+        }
+        lastGrowShrinkAmount = px
+        setSelection(sel.grown(by: px), label: "選択範囲を拡大")
+    }
+
+    func shrinkSelection(by px: Int) {
+        guard let sel = selection else {
+            warn("選択範囲がありません")
+            return
+        }
+        lastGrowShrinkAmount = px
+        setSelection(sel.shrunk(by: px), label: "選択範囲を縮小")
+    }
+
+    // MARK: 選択範囲の変形
+
+    /// 保留中の変形を適用してマスクを再ラスタライズ
+    func applySelectionTransform() {
+        guard let sel = selection, let b = sel.bounds(), !pendingTransform.isIdentity else { return }
+        pushUndo("選択範囲の変形")
+        selection = sel.transformed(
+            dx: pendingTransform.dx, dy: pendingTransform.dy,
+            scaleX: pendingTransform.scaleX, scaleY: pendingTransform.scaleY,
+            rotationDegrees: pendingTransform.rotation,
+            center: CGPoint(x: b.midX, y: b.midY)
+        )
+        pendingTransform = SelectionTransform()
+        if selection?.isEmpty ?? true {
+            selection = nil
+            warn("変形の結果、選択範囲が空になりました")
+        }
+    }
+
+    func resetSelectionTransform() {
+        pendingTransform = SelectionTransform()
+    }
+
+    // MARK: カット（選択範囲を透明化）
+
+    func cutSelection() {
+        guard let sel = selection else {
+            warn("選択範囲がありません")
+            return
+        }
+        pushUndo("カット")
+        let ok = withActiveLayer { l in
+            for y in 0..<l.buffer.height {
+                let cy = y + l.offsetY
+                for x in 0..<l.buffer.width {
+                    let v = sel.value(x: x + l.offsetX, y: cy)
+                    guard v > 0 else { continue }
+                    let i = (y * l.buffer.width + x) * 4 + 3
+                    // ソフトエッジ対応：マスク値ぶんアルファを減らす
+                    l.buffer.pixels[i] = UInt8(Int(l.buffer.pixels[i]) * (255 - Int(v)) / 255)
+                }
+            }
+            l.refreshCache()
+        }
+        if ok {
+            selection = nil  // 仕様：カット後、選択状態は解除される
+            pendingTransform = SelectionTransform()
+            recomposite()
+        } else {
+            discardLastUndo()  // ロック等で失敗した場合は履歴を戻す
+        }
+    }
+
+    // MARK: 塗りつぶし
+
+    /// 選択範囲内を塗りつぶし
+    func fillSelection() {
+        guard let sel = selection else {
+            warn("選択範囲がありません")
+            return
+        }
+        pushUndo("塗りつぶし")
+        let c = fillOpts.color
+        let ok = withActiveLayer { l in
+            for y in 0..<l.buffer.height {
+                let cy = y + l.offsetY
+                for x in 0..<l.buffer.width {
+                    let v = sel.value(x: x + l.offsetX, y: cy)
+                    guard v >= 128 else { continue }
+                    l.buffer.setColor(x: x, y: y, c)
+                }
+            }
+            l.refreshCache()
+        }
+        if ok { recomposite() } else { discardLastUndo() }
+    }
+
+    /// クリック位置の隣接類似色を塗りつぶし（フローフィル）
+    func floodFill(atCanvas p: CGPoint) {
+        guard let layer = activeLayer else { return }
+        let lx = Int(p.x.rounded(.down)) - layer.offsetX
+        let ly = Int(p.y.rounded(.down)) - layer.offsetY
+        guard lx >= 0, lx < layer.buffer.width, ly >= 0, ly < layer.buffer.height else { return }
+        pushUndo("塗りつぶし")
+        let region = ColorRangeEngine.floodFill(
+            pixels: layer.buffer.pixels, width: layer.buffer.width, height: layer.buffer.height,
+            startX: lx, startY: ly, tolerance: Int(fillOpts.tolerance * 2.55)
+        )
+        let c = fillOpts.color
+        let ok = withActiveLayer { l in
+            for i in 0..<(l.buffer.width * l.buffer.height) where region[i] >= 128 {
+                l.buffer.pixels[i * 4] = c.r
+                l.buffer.pixels[i * 4 + 1] = c.g
+                l.buffer.pixels[i * 4 + 2] = c.b
+                l.buffer.pixels[i * 4 + 3] = c.a
+            }
+            l.refreshCache()
+        }
+        if ok { recomposite() } else { discardLastUndo() }
+    }
+
+    // MARK: リサイズ / 回転 / 反転（レイヤー・選択モード対応）
+
+    func resizeActiveLayer(width: Int, height: Int) {
+        guard width > 0, height > 0 else {
+            warn("サイズが不正です")
+            return
+        }
+        if toolTargetMode == .selection {
+            guard let sel = selection, let b = sel.bounds() else {
+                warn("選択範囲がありません")
+                return
+            }
+            pushUndo("選択範囲のリサイズ")
+            selection = sel.transformed(
+                dx: 0, dy: 0,
+                scaleX: Double(width) / Double(b.width), scaleY: Double(height) / Double(b.height),
+                rotationDegrees: 0, center: CGPoint(x: b.minX, y: b.minY)
+            )
+            return
+        }
+        pushUndo("リサイズ")
+        let ok = withActiveLayer { l in
+            l.buffer = l.buffer.resized(width: width, height: height, quality: resizeOpts.quality)
+            l.refreshCache()
+        }
+        if ok { recomposite() } else { discardLastUndo() }
+    }
+
+    func rotate(byDegrees deg: Double) {
+        if toolTargetMode == .selection {
+            guard let sel = selection, let b = sel.bounds() else {
+                warn("選択範囲がありません")
+                return
+            }
+            pushUndo("選択範囲の回転")
+            selection = sel.transformed(dx: 0, dy: 0, scaleX: 1, scaleY: 1,
+                                        rotationDegrees: deg,
+                                        center: CGPoint(x: b.midX, y: b.midY))
+            return
+        }
+        pushUndo("回転")
+        let q = resizeOpts.quality
+        let ok = withActiveLayer { l in
+            let (buf, dx, dy) = l.buffer.rotated(byDegrees: deg, quality: q)
+            l.buffer = buf
+            l.offsetX += dx
+            l.offsetY += dy
+            l.refreshCache()
+        }
+        if ok { recomposite() } else { discardLastUndo() }
+    }
+
+    func flip(horizontal: Bool) {
+        if toolTargetMode == .selection {
+            guard let sel = selection, let b = sel.bounds() else {
+                warn("選択範囲がありません")
+                return
+            }
+            pushUndo(horizontal ? "選択範囲の水平反転" : "選択範囲の垂直反転")
+            selection = sel.transformed(dx: 0, dy: 0,
+                                        scaleX: horizontal ? -1 : 1, scaleY: horizontal ? 1 : -1,
+                                        rotationDegrees: 0,
+                                        center: CGPoint(x: b.midX, y: b.midY))
+            return
+        }
+        pushUndo(horizontal ? "水平反転" : "垂直反転")
+        let ok = withActiveLayer { l in
+            l.buffer = horizontal ? l.buffer.flippedHorizontally() : l.buffer.flippedVertically()
+            l.refreshCache()
+        }
+        if ok { recomposite() } else { discardLastUndo() }
+    }
+
+    // MARK: クロップ
+
+    func applyCrop() {
+        guard let rect = cropRect, rect.width >= 1, rect.height >= 1 else {
+            warn("クロップ範囲がありません")
+            return
+        }
+        pushUndo("クロップ")
+        let ox = Int(rect.minX.rounded()), oy = Int(rect.minY.rounded())
+        let w = Int(rect.width.rounded()), h = Int(rect.height.rounded())
+        for i in layers.indices {
+            layers[i].offsetX -= ox
+            layers[i].offsetY -= oy
+        }
+        canvasWidth = max(1, w)
+        canvasHeight = max(1, h)
+        selection = nil
+        cropRect = nil
+        recomposite()
+        fitToView()
+    }
+
+    // MARK: 色域選択（バックグラウンド処理）
+
+    func runColorRangeSelection() {
+        guard let layer = activeLayer else {
+            warn("レイヤーが選択されていません")
+            return
+        }
+        let pixels = layer.buffer.pixels
+        let w = layer.buffer.width, h = layer.buffer.height
+        let ox = layer.offsetX, oy = layer.offsetY
+        let cw = canvasWidth, ch = canvasHeight
+        let params = ColorRangeEngine.Params(
+            bgColor: (colorRangeOpts.bgColor.r, colorRangeOpts.bgColor.g, colorRangeOpts.bgColor.b),
+            level: Int(colorRangeOpts.level),
+            erosion: Int(colorRangeOpts.erosion),
+            inside: colorRangeOpts.inside
+        )
+        colorRangeBusy = true
+        Task.detached(priority: .userInitiated) {
+            do {
+                let (mask, info) = try ColorRangeEngine.select(pixels: pixels, width: w, height: h, params: params)
+                // レイヤー座標 → キャンバス座標
+                var canvasData = [UInt8](repeating: 0, count: cw * ch)
+                for y in 0..<h {
+                    let cy = y + oy
+                    guard cy >= 0, cy < ch else { continue }
+                    for x in 0..<w {
+                        let cx = x + ox
+                        guard cx >= 0, cx < cw else { continue }
+                        canvasData[cy * cw + cx] = mask[y * w + x]
+                    }
+                }
+                let result = SelectionMask(width: cw, height: ch, data: canvasData)
+                await MainActor.run { [result] in
+                    self.colorRangeBusy = false
+                    self.colorRangeInfo = "領域数: \(info.regionCount) / 選択: \(info.selectedPixels) px"
+                    self.applySelection(result, label: "色域選択")
+                }
+            } catch {
+                await MainActor.run {
+                    self.colorRangeBusy = false
+                    self.colorRangeInfo = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// 画像の四隅から背景色を自動検出して選択を実行
+    func autoDetectBackgroundColor() {
+        guard let layer = activeLayer else { return }
+        if let c = ColorRangeEngine.sampleBgColor(pixels: layer.buffer.pixels,
+                                                  width: layer.buffer.width,
+                                                  height: layer.buffer.height) {
+            colorRangeOpts.bgColor = PixelColor(r: c.r, g: c.g, b: c.b)
+            runColorRangeSelection()
+        }
+    }
+
+    // MARK: テキスト
+
+    func commitText() {
+        let str = textOpts.text
+        guard !str.isEmpty else {
+            warn("テキストが入力されていません")
+            return
+        }
+        guard let size = Double(textOpts.sizeText), size > 0 else {
+            warn("フォントサイズが不正です")
+            return
+        }
+        guard let buf = TextRenderer.render(
+            text: str, fontFamily: textOpts.fontFamily, size: size,
+            weight: textOpts.weight, color: textOpts.color, antialias: textOpts.antialias
+        ) else {
+            warn("テキストを描画できませんでした")
+            return
+        }
+        let px = Int(Double(textOpts.xText) ?? 0)
+        let py = Int(Double(textOpts.yText) ?? 0)
+        // 配置基準（3×3）：anchor 位置がテキスト矩形のどこに当たるか
+        let ax = Double(textOpts.anchor % 3) / 2.0
+        let ay = Double(textOpts.anchor / 3) / 2.0
+        let ox = px - Int((Double(buf.width) * ax).rounded())
+        let oy = py - Int((Double(buf.height) * ay).rounded())
+
+        pushUndo("テキスト追加")
+        let name = str.split(separator: "\n").first.map(String.init) ?? "テキスト"
+        let layer = Layer(name: name, buffer: buf, offsetX: ox, offsetY: oy)
+        layers.insert(layer, at: 0)
+        activeLayerID = layer.id
+        recomposite()
+    }
+
+    // MARK: クリップボード
+
+    func copySelectionToPasteboard() {
+        guard let layer = activeLayer else { return }
+        var buf: PixelBuffer
+        if let sel = selection, let b = sel.bounds() {
+            // 選択範囲（アクティブレイヤーとの交差）を切り出し
+            let w = Int(b.width), h = Int(b.height)
+            buf = PixelBuffer(width: w, height: h)
+            for y in 0..<h {
+                let cy = Int(b.minY) + y
+                for x in 0..<w {
+                    let cx = Int(b.minX) + x
+                    guard sel.isSelected(x: cx, y: cy),
+                          let c = layer.buffer.color(x: cx - layer.offsetX, y: cy - layer.offsetY) else { continue }
+                    buf.setColor(x: x, y: y, c)
+                }
+            }
+        } else {
+            buf = layer.buffer
+        }
+        guard let cg = buf.makeCGImage() else { return }
+        let rep = NSBitmapImageRep(cgImage: cg)
+        guard let data = rep.representation(using: .png, properties: [:]) else { return }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setData(data, forType: .png)
+    }
+
+    func pasteFromPasteboard() {
+        let pb = NSPasteboard.general
+        guard let img = NSImage(pasteboard: pb),
+              let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              let pasted = PixelBuffer(cgImage: cg) else {
+            warn("クリップボードに画像がありません")
+            return
+        }
+        guard activeLayer != nil else {
+            warn("レイヤーがありません")
+            return
+        }
+        pushUndo("ペースト")
+        // アクティブレイヤーへの貼り付け：レイヤー左上に合成
+        let ok = withActiveLayer { l in
+            guard let base = l.buffer.makeCGImage(), let overlay = pasted.makeCGImage() else { return }
+            let w = l.buffer.width, h = l.buffer.height
+            guard let ctx = CGContext(
+                data: nil, width: w, height: h,
+                bitsPerComponent: 8, bytesPerRow: 0,
+                space: PixelBuffer.sRGB,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return }
+            ctx.draw(base, in: CGRect(x: 0, y: 0, width: w, height: h))
+            ctx.draw(overlay, in: CGRect(x: 0, y: CGFloat(h - pasted.height),
+                                         width: CGFloat(pasted.width), height: CGFloat(pasted.height)))
+            if let out = ctx.makeImage(), let newBuf = PixelBuffer(cgImage: out) {
+                l.buffer = newBuf
+                l.refreshCache()
+            }
+        }
+        if ok { recomposite() } else { discardLastUndo() }
+    }
+
+    // MARK: スポイト
+
+    func sampleColor(atCanvas p: CGPoint) {
+        guard let c = compositeColor(atCanvas: p) else { return }
+        foregroundColor = c
+        fillOpts.color = c
+        textOpts.color = c
+        warn("色を取得: \(c.hexString)")
+    }
+}

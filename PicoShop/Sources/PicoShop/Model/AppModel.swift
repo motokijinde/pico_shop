@@ -1,0 +1,409 @@
+import SwiftUI
+import AppKit
+
+@MainActor
+final class AppModel: ObservableObject {
+
+    // MARK: - ドキュメント状態
+
+    @Published var layers: [Layer] = []          // 先頭が最上位レイヤー
+    @Published var canvasWidth: Int = 1024
+    @Published var canvasHeight: Int = 768
+    @Published var selection: SelectionMask? {
+        didSet { selectionPath = selection?.boundaryPath() }
+    }
+    @Published var activeLayerID: UUID?
+
+    /// マーチングアンツ用の境界パス（selection 変更時に再計算されるキャッシュ）
+    private(set) var selectionPath: Path?
+
+    @Published private(set) var composite: CGImage?
+    @Published private(set) var compositeBounds: CGRect = CGRect(x: 0, y: 0, width: 1024, height: 768)
+    private(set) var compositePixels: PixelBuffer?  // ルーペ・スポイト・ステータス用
+
+    @Published var projectURL: URL?
+
+    // MARK: - ビュー状態
+
+    @Published var zoom: CGFloat = 1
+    @Published var panOffset: CGSize = .zero
+    @Published var viewSize: CGSize = .zero
+    @Published var mouseCanvasPos: CGPoint?  // キャンバスピクセル座標
+
+    @Published var tool: Tool = .rectSelect {
+        didSet { if tool != .crop { cropRect = nil } }
+    }
+    @Published var selectionOperationMode: SelectionOperationMode = .replace
+    @Published var toolTargetMode: ToolTargetMode = .layer
+
+    @Published var showLoupe = false
+    @Published var showOptionsPanel = true
+    @Published var showLayersPanel = true
+    @Published var showToolbar = true
+    @Published var loupeZoom: Int = 400      // 100/200/400/800
+    @Published var loupePosition: CGPoint = CGPoint(x: 220, y: 220)
+    @Published var loupeIsLarge: Bool = false
+
+    @Published var statusMessage: String?
+
+    // MARK: - ダイアログ表示フラグ
+
+    @Published var showNewFileDialog = false
+    @Published var showCanvasSizeDialog = false
+    @Published var showModifySelectionDialog = false
+    @Published var showExportDialog = false
+
+    // MARK: - ツールオプション
+
+    @Published var colorRangeOpts = ColorRangeOptions()
+    @Published var brushOpts = BrushOptions()
+    @Published var fillOpts = FillOptions()
+    @Published var resizeOpts = ResizeOptions()
+    @Published var textOpts = TextOptions()
+    @Published var rotateOpts = RotateOptions()
+    @Published var foregroundColor = PixelColor.black
+
+    /// 選択範囲変形（適用前のプレビュー状態）
+    @Published var pendingTransform = SelectionTransform()
+    /// 変形パネル・矩形選択の「アスペクト比維持」トグル
+    @Published var transformKeepAspect = false
+    @Published var rectSelKeepAspect = false
+    /// 変形前のマスク bbox（数値フィールド用）
+    var selectionBaseBounds: CGRect? { selection?.bounds() }
+
+    /// クロップツールの保留矩形（キャンバス座標）
+    @Published var cropRect: CGRect?
+
+    /// 色域選択：処理中フラグと結果情報
+    @Published var colorRangeBusy = false
+    @Published var colorRangeInfo: String?
+
+    /// 選択範囲 拡大/縮小の最後に使った値（クイックメニュー用）
+    @Published var lastGrowShrinkAmount: Int = 8
+
+    // MARK: - アンドゥ / リドゥ
+
+    struct Snapshot {
+        var layers: [Layer]
+        var canvasWidth: Int
+        var canvasHeight: Int
+        var selection: SelectionMask?
+        var activeLayerID: UUID?
+        var label: String
+    }
+
+    @Published private(set) var undoStack: [Snapshot] = []
+    @Published private(set) var redoStack: [Snapshot] = []
+    var undoLabel: String? { undoStack.last?.label }
+    var redoLabel: String? { redoStack.last?.label }
+
+    private var coalesceKey: String?
+    private var coalesceTime: Date = .distantPast
+
+    // MARK: - キーボード
+
+    private var keyDownMonitor: Any?
+    @Published var spaceKeyDown = false
+
+    init() {
+        let layer = Layer(name: "レイヤー1", buffer: PixelBuffer(width: 1024, height: 768))
+        layers = [layer]
+        activeLayerID = layer.id
+        recomposite()
+        installKeyMonitors()
+        openCommandLineFiles()
+    }
+
+    /// CLI からの起動用：PICOSHOP_OPEN（コロン区切りパス）で渡されたファイルを起動時に開く。
+    /// argv にパスを渡すと AppKit がファイルオープンイベントとして解釈し
+    /// WindowGroup のウィンドウ生成が抑制されるため、環境変数を使う。
+    private func openCommandLineFiles() {
+        guard let env = ProcessInfo.processInfo.environment["PICOSHOP_OPEN"] else { return }
+        let urls = env.split(separator: ":")
+            .map { URL(fileURLWithPath: String($0)) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard !urls.isEmpty else { return }
+        if let pic = urls.first(where: { $0.pathExtension.lowercased() == "pic" }) {
+            openProject(url: pic)
+        }
+        let images = urls.filter { $0.pathExtension.lowercased() != "pic" }
+        if !images.isEmpty {
+            openImageFiles(images)
+        }
+    }
+
+    // MARK: - レイヤーアクセス
+
+    var activeLayer: Layer? {
+        guard let id = activeLayerID else { return nil }
+        return layers.first { $0.id == id }
+    }
+
+    var activeLayerIndex: Int? {
+        guard let id = activeLayerID else { return nil }
+        return layers.firstIndex { $0.id == id }
+    }
+
+    /// アクティブレイヤーを変更（ロック検査つき）。ロック中なら警告して false。
+    func withActiveLayer(checkLock: Bool = true, _ body: (inout Layer) -> Void) -> Bool {
+        guard let idx = activeLayerIndex else {
+            warn("レイヤーが選択されていません")
+            return false
+        }
+        if checkLock && layers[idx].locked {
+            warn("レイヤーがロックされています")
+            NSSound.beep()
+            return false
+        }
+        body(&layers[idx])
+        return true
+    }
+
+    /// 手動マスク編集の開始（選択がなければ空のマスクを作る）
+    func beginBrushStroke() {
+        pushUndo("手動マスク編集", coalesceKey: "brush")
+        if selection == nil {
+            selection = SelectionMask(width: canvasWidth, height: canvasHeight)
+        }
+    }
+
+    func warn(_ message: String) {
+        statusMessage = message
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            if self?.statusMessage == message { self?.statusMessage = nil }
+        }
+    }
+
+    // MARK: - 合成
+
+    func recomposite() {
+        compositeBounds = Compositor.unionBounds(layers: layers, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
+        composite = Compositor.composite(layers: layers, bounds: compositeBounds)
+        if let img = composite {
+            compositePixels = PixelBuffer(cgImage: img)
+        } else {
+            compositePixels = nil
+        }
+    }
+
+    /// キャンバス座標の合成済みピクセル色（ルーペ・スポイト用）
+    func compositeColor(atCanvas p: CGPoint) -> PixelColor? {
+        guard let buf = compositePixels else { return nil }
+        let x = Int(p.x.rounded(.down)) - Int(compositeBounds.minX)
+        let y = Int(p.y.rounded(.down)) - Int(compositeBounds.minY)
+        return buf.color(x: x, y: y)
+    }
+
+    // MARK: - 座標変換（キャンバス座標 ↔ ビュー座標）
+
+    var canvasCenter: CGPoint {
+        CGPoint(x: CGFloat(canvasWidth) / 2, y: CGFloat(canvasHeight) / 2)
+    }
+
+    func canvasToView(_ p: CGPoint) -> CGPoint {
+        CGPoint(x: (p.x - canvasCenter.x) * zoom + viewSize.width / 2 + panOffset.width,
+                y: (p.y - canvasCenter.y) * zoom + viewSize.height / 2 + panOffset.height)
+    }
+
+    func viewToCanvas(_ p: CGPoint) -> CGPoint {
+        CGPoint(x: (p.x - viewSize.width / 2 - panOffset.width) / zoom + canvasCenter.x,
+                y: (p.y - viewSize.height / 2 - panOffset.height) / zoom + canvasCenter.y)
+    }
+
+    /// 現在ビューに見えているキャンバス座標の矩形
+    var visibleCanvasRect: CGRect {
+        let tl = viewToCanvas(.zero)
+        let br = viewToCanvas(CGPoint(x: viewSize.width, y: viewSize.height))
+        return CGRect(x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y)
+    }
+
+    // MARK: - ズーム / パン
+
+    func setZoom(_ z: CGFloat, around viewPoint: CGPoint? = nil) {
+        let newZoom = max(0.02, min(64, z))
+        if let vp = viewPoint {
+            // ポイント下のキャンバス座標を固定してズーム
+            let c = viewToCanvas(vp)
+            zoom = newZoom
+            let after = canvasToView(c)
+            panOffset.width += vp.x - after.x
+            panOffset.height += vp.y - after.y
+        } else {
+            zoom = newZoom
+        }
+    }
+
+    func zoomIn() { setZoom(zoom * 1.5) }
+    func zoomOut() { setZoom(zoom / 1.5) }
+
+    func fitToView() {
+        guard viewSize.width > 0 else { return }
+        let b = compositeBounds
+        let s = min(viewSize.width / b.width, viewSize.height / b.height) * 0.92
+        zoom = max(0.02, min(64, s))
+        // composite の中心がビュー中心に来るように
+        let bCenter = CGPoint(x: b.midX, y: b.midY)
+        panOffset = CGSize(width: -(bCenter.x - canvasCenter.x) * zoom,
+                           height: -(bCenter.y - canvasCenter.y) * zoom)
+    }
+
+    func zoomActualSize() {
+        zoom = 1
+        panOffset = .zero
+    }
+
+    /// ナビゲーターから：キャンバス座標 c がビュー中心に来るようにパン
+    func scrollTo(canvasPoint c: CGPoint) {
+        panOffset = CGSize(width: -(c.x - canvasCenter.x) * zoom,
+                           height: -(c.y - canvasCenter.y) * zoom)
+    }
+
+    // MARK: - アンドゥ / リドゥ
+
+    /// 変更前に呼ぶ。coalesceKey が同じ操作が 1 秒以内に続く場合はまとめる（カーソルキー連打用）
+    func pushUndo(_ label: String, coalesceKey key: String? = nil) {
+        if let key, key == coalesceKey, Date().timeIntervalSince(coalesceTime) < 1.0 {
+            coalesceTime = Date()
+            return
+        }
+        coalesceKey = key
+        coalesceTime = Date()
+        undoStack.append(currentSnapshot(label: label))
+        if undoStack.count > 50 { undoStack.removeFirst(undoStack.count - 50) }
+        redoStack.removeAll()
+    }
+
+    private func currentSnapshot(label: String) -> Snapshot {
+        Snapshot(layers: layers, canvasWidth: canvasWidth, canvasHeight: canvasHeight,
+                 selection: selection, activeLayerID: activeLayerID, label: label)
+    }
+
+    /// 操作が失敗（ロック等）した場合に直前の pushUndo を取り消す
+    func discardLastUndo() {
+        guard !undoStack.isEmpty else { return }
+        undoStack.removeLast()
+    }
+
+    func undo() {
+        guard let snap = undoStack.popLast() else { return }
+        redoStack.append(currentSnapshot(label: snap.label))
+        restore(snap)
+    }
+
+    func redo() {
+        guard let snap = redoStack.popLast() else { return }
+        undoStack.append(currentSnapshot(label: snap.label))
+        restore(snap)
+    }
+
+    private func restore(_ snap: Snapshot) {
+        layers = snap.layers
+        canvasWidth = snap.canvasWidth
+        canvasHeight = snap.canvasHeight
+        selection = snap.selection
+        activeLayerID = snap.activeLayerID
+        pendingTransform = SelectionTransform()
+        coalesceKey = nil
+        recomposite()
+    }
+
+    // MARK: - キーボード操作（カーソルキー 1px 調整）
+
+    private func installKeyMonitors() {
+        keyDownMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            guard let self else { return event }
+            return self.handleKeyEvent(event)
+        }
+    }
+
+    private func handleKeyEvent(_ event: NSEvent) -> NSEvent? {
+        // テキスト編集中は何もしない
+        if let responder = NSApp.keyWindow?.firstResponder, responder is NSTextView {
+            return event
+        }
+
+        // スペースキー（パン用）
+        if event.keyCode == 49 {
+            spaceKeyDown = (event.type == .keyDown)
+            return nil
+        }
+
+        guard event.type == .keyDown else { return event }
+
+        switch event.keyCode {
+        case 123: return handleArrow(dx: -1, dy: 0, shift: event.modifierFlags.contains(.shift)) ? nil : event
+        case 124: return handleArrow(dx: 1, dy: 0, shift: event.modifierFlags.contains(.shift)) ? nil : event
+        case 125: return handleArrow(dx: 0, dy: 1, shift: event.modifierFlags.contains(.shift)) ? nil : event
+        case 126: return handleArrow(dx: 0, dy: -1, shift: event.modifierFlags.contains(.shift)) ? nil : event
+        case 51, 117:  // Delete / Forward Delete → カット
+            if selection != nil {
+                cutSelection()
+                return nil
+            }
+            return event
+        default:
+            return event
+        }
+    }
+
+    /// カーソルキー：位置移動（1px）、Shift+カーソルキー：サイズ変更（1px）
+    /// 戻り値：イベントを消費したか
+    @discardableResult
+    func handleArrow(dx: Int, dy: Int, shift: Bool) -> Bool {
+        let targetSelection = (tool.isSelectionTool && selection != nil)
+            || (tool == .maskBrush && selection != nil)
+            || (toolTargetMode == .selection && selection != nil)
+
+        if targetSelection {
+            guard let sel = selection, let b = sel.bounds() else { return false }
+            if shift {
+                // 範囲のサイズ変更：→拡大/←縮小（幅）、↓拡大/↑縮小（高さ）
+                let dw = Double(dx), dh = Double(dy)
+                let newW = max(1, b.width + CGFloat(dw))
+                let newH = max(1, b.height + CGFloat(dh))
+                pushUndo("選択範囲のサイズ変更", coalesceKey: "sel-resize")
+                selection = sel.transformed(
+                    dx: 0, dy: 0,
+                    scaleX: Double(newW / b.width), scaleY: Double(newH / b.height),
+                    rotationDegrees: 0,
+                    center: CGPoint(x: b.minX, y: b.minY)  // 左上アンカー
+                )
+            } else {
+                pushUndo("選択範囲の移動", coalesceKey: "sel-move")
+                selection = sel.translated(dx: dx, dy: dy)
+            }
+            return true
+        }
+
+        // レイヤーモード
+        guard activeLayer != nil else { return false }
+        if shift {
+            guard let layer = activeLayer else { return false }
+            let newW = max(1, layer.buffer.width + dx)
+            let newH = max(1, layer.buffer.height + dy)
+            pushUndo("レイヤーのサイズ変更", coalesceKey: "layer-resize")
+            let ok = withActiveLayer { l in
+                l.buffer = l.buffer.resized(width: newW, height: newH, quality: resizeOpts.quality)
+                l.refreshCache()
+            }
+            if ok { recomposite() }
+            return ok
+        } else {
+            pushUndo("レイヤーの移動", coalesceKey: "layer-move")
+            let ok = withActiveLayer { l in
+                l.offsetX += dx
+                l.offsetY += dy
+            }
+            if ok { recomposite() }
+            return ok
+        }
+    }
+
+    deinit {
+        // monitor は アプリ終了まで生存するため明示解放は不要だが念のため
+        if let m = keyDownMonitor {
+            NSEvent.removeMonitor(m)
+        }
+    }
+}
