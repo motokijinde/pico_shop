@@ -30,46 +30,15 @@ struct CanvasView: View {
     @State private var scrollMonitor: Any?
     @GestureState private var pinchDelta: CGFloat = 1.0
 
-    private let rulerSize: CGFloat = 20
-
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
                 Color(nsColor: .underPageBackgroundColor)
 
-                Canvas { ctx, _ in
-                    drawCheckerboard(&ctx, in: canvasViewRect())
-                }
-
-                if let img = model.composite {
-                    let b = model.compositeBounds
-                    let topLeft = model.canvasToView(CGPoint(x: b.minX, y: b.minY))
-                    Image(decorative: img, scale: 1)
-                        .resizable()
-                        .interpolation(model.zoom >= 1 ? .none : .high)
-                        .frame(width: b.width * model.zoom, height: b.height * model.zoom)
-                        .position(x: topLeft.x + b.width * model.zoom / 2,
-                                  y: topLeft.y + b.height * model.zoom / 2)
-                }
-
-                Canvas { ctx, size in
-                    drawOverlays(&ctx, size: size)
-                }
-                .allowsHitTesting(false)
-
-                if model.selection != nil {
-                    TimelineView(.animation(minimumInterval: 0.1)) { timeline in
-                        Canvas { ctx, _ in
-                            drawMarchingAnts(&ctx, date: timeline.date)
-                        }
-                    }
-                    .allowsHitTesting(false)
-                }
-
-                Canvas { ctx, size in
-                    drawRulers(&ctx, size: size)
-                }
-                .allowsHitTesting(false)
+                // チェッカーボード・合成画像・オーバーレイ・定規はすべて Metal で描画
+                CanvasMetalView(previewRect: previewRect,
+                                lassoPoints: lassoPoints,
+                                hovering: hovering)
             }
             .clipped()
             .contentShape(Rectangle())
@@ -97,184 +66,11 @@ struct CanvasView: View {
             .onAppear {
                 model.viewSize = geo.size
                 installScrollMonitor()
-                if model.composite != nil { model.fitToView() }
+                if model.gpuCompositor?.compositeTexture != nil { model.fitToView() }
             }
             .onDisappear { removeScrollMonitor() }
             .onChange(of: geo.size) { _, s in model.viewSize = s }
         }
-    }
-
-    // MARK: - 座標ヘルパー
-
-    private func canvasViewRect() -> CGRect {
-        let tl = model.canvasToView(.zero)
-        let br = model.canvasToView(CGPoint(x: CGFloat(model.canvasWidth), y: CGFloat(model.canvasHeight)))
-        return CGRect(x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y)
-    }
-
-    private func canvasToViewTransform() -> CGAffineTransform {
-        let c = model.canvasCenter
-        return CGAffineTransform(translationX: model.viewSize.width / 2 + model.panOffset.width - c.x * model.zoom,
-                                 y: model.viewSize.height / 2 + model.panOffset.height - c.y * model.zoom)
-            .scaledBy(x: model.zoom, y: model.zoom)
-    }
-
-    // MARK: - 描画
-
-    private func drawOverlays(_ ctx: inout GraphicsContext, size: CGSize) {
-        let canvasRect = canvasViewRect()
-
-        var outside = Path(CGRect(origin: .zero, size: size))
-        outside.addRect(canvasRect)
-        ctx.fill(outside, with: .color(Color.black.opacity(0.35)), style: FillStyle(eoFill: true))
-
-        ctx.stroke(Path(canvasRect), with: .color(.white),
-                   style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-
-        let center = model.canvasToView(model.canvasCenter)
-        var cross = Path()
-        cross.move(to: CGPoint(x: canvasRect.minX, y: center.y))
-        cross.addLine(to: CGPoint(x: canvasRect.maxX, y: center.y))
-        cross.move(to: CGPoint(x: center.x, y: canvasRect.minY))
-        cross.addLine(to: CGPoint(x: center.x, y: canvasRect.maxY))
-        ctx.stroke(cross, with: .color(Color.gray.opacity(0.55)),
-                   style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-
-        let toView = canvasToViewTransform()
-
-        if let r = previewRect {
-            let vr = r.applying(toView)
-            ctx.fill(Path(vr), with: .color(Color.accentColor.opacity(0.12)))
-            ctx.stroke(Path(vr), with: .color(Color.accentColor), lineWidth: 1)
-        }
-
-        if model.tool == .crop, let r = model.cropRect {
-            let vr = r.applying(toView)
-            var dim = Path(CGRect(origin: .zero, size: size))
-            dim.addRect(vr)
-            ctx.fill(dim, with: .color(Color.black.opacity(0.3)), style: FillStyle(eoFill: true))
-            ctx.stroke(Path(vr), with: .color(.yellow), style: StrokeStyle(lineWidth: 1.5, dash: [6, 3]))
-        }
-
-        if lassoPoints.count >= 2 {
-            var p = Path()
-            p.move(to: lassoPoints[0])
-            for pt in lassoPoints.dropFirst() { p.addLine(to: pt) }
-            ctx.stroke(p.applying(toView), with: .color(Color.accentColor), lineWidth: 1)
-        }
-
-        // ブラシカーソル（マスクブラシツールのみ）
-        if model.tool == .maskBrush, hovering, let mp = model.mouseCanvasPos {
-            let r = CGFloat(model.brushOpts.size) / 2 * model.zoom
-            let c = model.canvasToView(mp)
-            ctx.stroke(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
-                       with: .color(model.brushOpts.add ? .green : .red), lineWidth: 1)
-        }
-
-        // 変形ハンドル（変形ツールのみ）
-        if model.tool == .transform, let handles = transformHandles() {
-            for p in handles.corners + handles.edges {
-                let r = CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8)
-                ctx.fill(Path(r), with: .color(.white))
-                ctx.stroke(Path(r), with: .color(.black), lineWidth: 1)
-            }
-            let c = handles.center
-            let cr = CGRect(x: c.x - 5, y: c.y - 5, width: 10, height: 10)
-            ctx.fill(Path(ellipseIn: cr), with: .color(.white))
-            ctx.stroke(Path(ellipseIn: cr), with: .color(.black), lineWidth: 1)
-        }
-    }
-
-    private func drawMarchingAnts(_ ctx: inout GraphicsContext, date: Date) {
-        guard var path = model.selectionPath else { return }
-        // pendingTransform のプレビューは変形ツールのみ適用
-        if model.tool == .transform, !model.pendingTransform.isIdentity,
-           let b = model.selectionBaseBounds {
-            path = path.applying(model.pendingTransform.affine(center: CGPoint(x: b.midX, y: b.midY)))
-        }
-        let viewPath = path.applying(canvasToViewTransform())
-        let phase = CGFloat(date.timeIntervalSinceReferenceDate * 20).truncatingRemainder(dividingBy: 10)
-        ctx.stroke(viewPath, with: .color(.white),
-                   style: StrokeStyle(lineWidth: 1, dash: [5, 5], dashPhase: phase))
-        ctx.stroke(viewPath, with: .color(.black),
-                   style: StrokeStyle(lineWidth: 1, dash: [5, 5], dashPhase: phase + 5))
-    }
-
-    private func drawRulers(_ ctx: inout GraphicsContext, size: CGSize) {
-        let bg = Color(nsColor: .windowBackgroundColor).opacity(0.92)
-        ctx.fill(Path(CGRect(x: 0, y: 0, width: size.width, height: rulerSize)), with: .color(bg))
-        ctx.fill(Path(CGRect(x: 0, y: 0, width: rulerSize + 4, height: size.height)), with: .color(bg))
-
-        let candidates: [CGFloat] = [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000]
-        let step = candidates.first { $0 * model.zoom >= 42 } ?? 5000
-        let visible = model.visibleCanvasRect
-        let tickColor = Color.secondary
-
-        var x = (visible.minX / step).rounded(.down) * step
-        while x <= visible.maxX {
-            let vx = model.canvasToView(CGPoint(x: x, y: 0)).x
-            if vx >= rulerSize {
-                var tick = Path()
-                tick.move(to: CGPoint(x: vx, y: rulerSize - 6))
-                tick.addLine(to: CGPoint(x: vx, y: rulerSize))
-                ctx.stroke(tick, with: .color(tickColor), lineWidth: 1)
-                ctx.draw(Text(String(Int(x))).font(.system(size: 9)).foregroundColor(.secondary),
-                         at: CGPoint(x: vx + 2, y: 6), anchor: .leading)
-            }
-            x += step
-        }
-
-        var y = (visible.minY / step).rounded(.down) * step
-        while y <= visible.maxY {
-            let vy = model.canvasToView(CGPoint(x: 0, y: y)).y
-            if vy >= rulerSize {
-                var tick = Path()
-                tick.move(to: CGPoint(x: rulerSize - 2, y: vy))
-                tick.addLine(to: CGPoint(x: rulerSize + 4, y: vy))
-                ctx.stroke(tick, with: .color(tickColor), lineWidth: 1)
-                ctx.draw(Text(String(Int(y))).font(.system(size: 9)).foregroundColor(.secondary),
-                         at: CGPoint(x: 2, y: vy + 2), anchor: .topLeading)
-            }
-            y += step
-        }
-
-        var border = Path()
-        border.move(to: CGPoint(x: 0, y: rulerSize))
-        border.addLine(to: CGPoint(x: size.width, y: rulerSize))
-        border.move(to: CGPoint(x: rulerSize + 4, y: 0))
-        border.addLine(to: CGPoint(x: rulerSize + 4, y: size.height))
-        ctx.stroke(border, with: .color(Color.secondary.opacity(0.4)), lineWidth: 1)
-    }
-
-    // MARK: - 変形ハンドル（変形ツール専用）
-
-    private struct Handles {
-        var corners: [CGPoint]
-        var edges: [CGPoint]
-        var center: CGPoint
-        var cornersBase: [CGPoint]
-        var edgesBase: [CGPoint]
-        var bounds: CGRect
-    }
-
-    private func transformHandles() -> Handles? {
-        guard let b = model.selectionBaseBounds else { return nil }
-        let t = model.pendingTransform
-        let center = CGPoint(x: b.midX, y: b.midY)
-        let affine = t.affine(center: center).concatenating(canvasToViewTransform())
-
-        let cornersBase = [CGPoint(x: b.minX, y: b.minY), CGPoint(x: b.maxX, y: b.minY),
-                           CGPoint(x: b.maxX, y: b.maxY), CGPoint(x: b.minX, y: b.maxY)]
-        let edgesBase = [CGPoint(x: b.midX, y: b.minY), CGPoint(x: b.maxX, y: b.midY),
-                         CGPoint(x: b.midX, y: b.maxY), CGPoint(x: b.minX, y: b.midY)]
-        return Handles(
-            corners: cornersBase.map { $0.applying(affine) },
-            edges: edgesBase.map { $0.applying(affine) },
-            center: center.applying(t.affine(center: center)).applying(canvasToViewTransform()),
-            cornersBase: cornersBase,
-            edgesBase: edgesBase,
-            bounds: b
-        )
     }
 
     // MARK: - ドラッグジェスチャー
@@ -326,7 +122,7 @@ struct CanvasView: View {
             return .brush
 
         case .transform:
-            if let h = transformHandles() {
+            if let h = model.transformHandles() {
                 let t0 = model.pendingTransform
                 let center = CGPoint(x: h.bounds.midX, y: h.bounds.midY)
                 if distance(viewPoint, h.center) < 8 {
@@ -573,7 +369,7 @@ struct CanvasView: View {
             NSCursor.arrow.set()
             return
         }
-        if let h = transformHandles() {
+        if let h = model.transformHandles() {
             if distance(vp, h.center) < 8 {
                 NSCursor.crosshair.set()
                 return

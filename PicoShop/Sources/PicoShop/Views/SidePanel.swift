@@ -45,27 +45,8 @@ struct NavigatorPanel: View {
                 let origin = CGPoint(x: (geo.size.width - thumbSize.width) / 2,
                                      y: (geo.size.height - thumbSize.height) / 2)
 
-                ZStack(alignment: .topLeading) {
-                    Color(nsColor: .underPageBackgroundColor)
-                    if let img = model.composite {
-                        Image(decorative: img, scale: 1)
-                            .resizable()
-                            .interpolation(.medium)
-                            .frame(width: thumbSize.width, height: thumbSize.height)
-                            .offset(x: origin.x, y: origin.y)
-                    }
-                    // 赤枠：現在見えている範囲
-                    let visible = model.visibleCanvasRect.intersection(
-                        CGRect(x: b.minX, y: b.minY, width: b.width, height: b.height))
-                    if !visible.isNull, visible.width > 0 {
-                        Rectangle()
-                            .stroke(Color.red, lineWidth: 1.5)
-                            .frame(width: max(4, visible.width * scale),
-                                   height: max(4, visible.height * scale))
-                            .offset(x: origin.x + (visible.minX - b.minX) * scale,
-                                    y: origin.y + (visible.minY - b.minY) * scale)
-                    }
-                }
+                // サムネイルと赤枠（可視範囲）は Metal で描画
+                NavigatorMetalView()
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 0)

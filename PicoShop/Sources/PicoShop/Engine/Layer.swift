@@ -35,6 +35,15 @@ enum LayerBlendMode: String, CaseIterable, Identifiable, Codable {
 
 // MARK: - レイヤー
 
+/// contentVersion 用のグローバル単調増加カウンター。
+/// アンドゥで古い Layer 構造体が復元されても値が衝突しないよう、常に新しい値を払い出す。
+private var layerContentVersionCounter: UInt64 = 0
+
+private func nextLayerContentVersion() -> UInt64 {
+    layerContentVersionCounter += 1
+    return layerContentVersionCounter
+}
+
 struct Layer: Identifiable {
     let id: UUID
     var name: String
@@ -49,6 +58,10 @@ struct Layer: Identifiable {
     /// 表示用キャッシュ（buffer 変更時に refreshCache() で更新）
     var cachedImage: CGImage?
 
+    /// ピクセル内容の世代番号（GPU テクスチャの再アップロード判定用）。
+    /// buffer を書き換えたら refreshCache() で更新すること。
+    private(set) var contentVersion: UInt64 = nextLayerContentVersion()
+
     init(name: String, buffer: PixelBuffer, offsetX: Int = 0, offsetY: Int = 0) {
         self.id = UUID()
         self.name = name
@@ -60,6 +73,7 @@ struct Layer: Identifiable {
 
     mutating func refreshCache() {
         cachedImage = buffer.makeCGImage()
+        contentVersion = nextLayerContentVersion()
     }
 
     /// キャンバス座標系でのレイヤー矩形

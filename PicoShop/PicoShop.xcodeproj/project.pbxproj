@@ -25,6 +25,16 @@
 		A10000000000000000000035 /* SelectionMask.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000034 /* SelectionMask.swift */; };
 		A10000000000000000000037 /* PixelBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000036 /* PixelBuffer.swift */; };
 		A10000000000000000000039 /* Layer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000038 /* Layer.swift */; };
+		A1000000000000000000003B /* HoverState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003A /* HoverState.swift */; };
+		A1000000000000000000003D /* CanvasMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* CanvasMetalView.swift */; };
+		A1000000000000000000003F /* GPUCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003E /* GPUCompositor.swift */; };
+		A10000000000000000000041 /* LayerTextureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000040 /* LayerTextureStore.swift */; };
+		A10000000000000000000043 /* LoupeMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000042 /* LoupeMetalView.swift */; };
+		A10000000000000000000045 /* MetalEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000044 /* MetalEngine.swift */; };
+		A10000000000000000000047 /* NavigatorMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000046 /* NavigatorMetalView.swift */; };
+		A10000000000000000000049 /* OverlayRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000048 /* OverlayRenderer.swift */; };
+		A1000000000000000000004B /* OverlayScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000004A /* OverlayScene.swift */; };
+		A1000000000000000000004D /* ShaderSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000004C /* ShaderSource.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -48,6 +58,16 @@
 		A10000000000000000000034 /* SelectionMask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionMask.swift; sourceTree = "<group>"; };
 		A10000000000000000000036 /* PixelBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelBuffer.swift; sourceTree = "<group>"; };
 		A10000000000000000000038 /* Layer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Layer.swift; sourceTree = "<group>"; };
+		A1000000000000000000003A /* HoverState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverState.swift; sourceTree = "<group>"; };
+		A1000000000000000000003C /* CanvasMetalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasMetalView.swift; sourceTree = "<group>"; };
+		A1000000000000000000003E /* GPUCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPUCompositor.swift; sourceTree = "<group>"; };
+		A10000000000000000000040 /* LayerTextureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayerTextureStore.swift; sourceTree = "<group>"; };
+		A10000000000000000000042 /* LoupeMetalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoupeMetalView.swift; sourceTree = "<group>"; };
+		A10000000000000000000044 /* MetalEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalEngine.swift; sourceTree = "<group>"; };
+		A10000000000000000000046 /* NavigatorMetalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigatorMetalView.swift; sourceTree = "<group>"; };
+		A10000000000000000000048 /* OverlayRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayRenderer.swift; sourceTree = "<group>"; };
+		A1000000000000000000004A /* OverlayScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayScene.swift; sourceTree = "<group>"; };
+		A1000000000000000000004C /* ShaderSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderSource.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -94,8 +114,25 @@
 				A10000000000000000000012 /* Model */,
 				A10000000000000000000013 /* Views */,
 				A10000000000000000000014 /* Engine */,
+				A1000000000000000000004E /* Metal */,
 			);
 			path = PicoShop;
+			sourceTree = "<group>";
+		};
+		A1000000000000000000004E /* Metal */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000003C /* CanvasMetalView.swift */,
+				A1000000000000000000003E /* GPUCompositor.swift */,
+				A10000000000000000000040 /* LayerTextureStore.swift */,
+				A10000000000000000000042 /* LoupeMetalView.swift */,
+				A10000000000000000000044 /* MetalEngine.swift */,
+				A10000000000000000000046 /* NavigatorMetalView.swift */,
+				A10000000000000000000048 /* OverlayRenderer.swift */,
+				A1000000000000000000004A /* OverlayScene.swift */,
+				A1000000000000000000004C /* ShaderSource.swift */,
+			);
+			path = Metal;
 			sourceTree = "<group>";
 		};
 		A10000000000000000000011 /* IO */ = {
@@ -113,6 +150,7 @@
 				A1000000000000000000001C /* AppModel+Operations.swift */,
 				A10000000000000000000020 /* AppModel+File.swift */,
 				A1000000000000000000001A /* ToolTypes.swift */,
+				A1000000000000000000003A /* HoverState.swift */,
 			);
 			path = Model;
 			sourceTree = "<group>";
@@ -229,6 +267,16 @@
 				A10000000000000000000035 /* SelectionMask.swift in Sources */,
 				A10000000000000000000037 /* PixelBuffer.swift in Sources */,
 				A10000000000000000000039 /* Layer.swift in Sources */,
+				A1000000000000000000003B /* HoverState.swift in Sources */,
+				A1000000000000000000003D /* CanvasMetalView.swift in Sources */,
+				A1000000000000000000003F /* GPUCompositor.swift in Sources */,
+				A10000000000000000000041 /* LayerTextureStore.swift in Sources */,
+				A10000000000000000000043 /* LoupeMetalView.swift in Sources */,
+				A10000000000000000000045 /* MetalEngine.swift in Sources */,
+				A10000000000000000000047 /* NavigatorMetalView.swift in Sources */,
+				A10000000000000000000049 /* OverlayRenderer.swift in Sources */,
+				A1000000000000000000004B /* OverlayScene.swift in Sources */,
+				A1000000000000000000004D /* ShaderSource.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

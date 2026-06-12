@@ -150,13 +150,6 @@ struct ToolbarView: View {
 struct StatusBarView: View {
     @EnvironmentObject var model: AppModel
 
-    private var mouseText: String {
-        if let p = model.mouseCanvasPos {
-            return "X: \(Int(p.x.rounded(.down))) Y: \(Int(p.y.rounded(.down)))"
-        }
-        return "X: - Y: -"
-    }
-
     private var selectionText: String? {
         guard let b = model.selection?.bounds() else { return nil }
         return "\(Int(b.width))×\(Int(b.height))"
@@ -178,7 +171,8 @@ struct StatusBarView: View {
         HStack(spacing: 6) {
             Text("\(canvasLabel): \(String(model.canvasWidth))×\(String(model.canvasHeight))")
             Text("|").foregroundStyle(.tertiary)
-            Text(mouseText)
+            // マウス座標は高頻度更新なので HoverState だけを観測する小ビューに分離
+            MouseCoordText(hover: model.hover)
             Text("|").foregroundStyle(.tertiary)
             Text("\(zoomLabel): \(Int((model.zoom * 100).rounded()))%")
             if let sel = selectionText {
@@ -193,6 +187,20 @@ struct StatusBarView: View {
         .font(.caption.monospacedDigit())
         .foregroundStyle(.secondary)
         .lineLimit(1)
+    }
+}
+
+// MARK: - マウス座標表示（HoverState のみ観測）
+
+private struct MouseCoordText: View {
+    @ObservedObject var hover: HoverState
+
+    var body: some View {
+        if let p = hover.mouseCanvasPos {
+            Text("X: \(Int(p.x.rounded(.down))) Y: \(Int(p.y.rounded(.down)))")
+        } else {
+            Text("X: - Y: -")
+        }
     }
 }
 

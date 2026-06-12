@@ -10,16 +10,23 @@ final class AppModel: ObservableObject {
     @Published var canvasWidth: Int = 1024
     @Published var canvasHeight: Int = 768
     @Published var selection: SelectionMask? {
-        didSet { selectionPath = selection?.boundaryPath() }
+        didSet {
+            selectionPath = selection?.boundaryPath()
+            selectionVersion &+= 1
+        }
     }
+
+    /// 選択範囲の世代番号（Metal 側のアンツメッシュ再構築判定用）
+    private(set) var selectionVersion: UInt64 = 0
     @Published var activeLayerID: UUID?
 
     /// マーチングアンツ用の境界パス（selection 変更時に再計算されるキャッシュ）
     private(set) var selectionPath: Path?
 
-    @Published private(set) var composite: CGImage?
     @Published private(set) var compositeBounds: CGRect = CGRect(x: 0, y: 0, width: 1024, height: 768)
-    private(set) var compositePixels: PixelBuffer?  // ルーペ・スポイト・ステータス用
+
+    /// GPU レイヤー合成器（キャンバス・ルーペ・ナビゲーターの共有テクスチャ源）
+    let gpuCompositor: GPUCompositor? = MetalEngine.shared.flatMap { GPUCompositor(engine: $0) }
 
     @Published var projectURL: URL?
 
@@ -28,7 +35,13 @@ final class AppModel: ObservableObject {
     @Published var zoom: CGFloat = 1
     @Published var panOffset: CGSize = .zero
     @Published var viewSize: CGSize = .zero
-    @Published var mouseCanvasPos: CGPoint?  // キャンバスピクセル座標
+
+    /// マウス座標（高頻度更新のため AppModel ではなく HoverState が publish する）
+    let hover = HoverState()
+    var mouseCanvasPos: CGPoint? {
+        get { hover.mouseCanvasPos }
+        set { hover.mouseCanvasPos = newValue }
+    }
 
     @Published var tool: Tool = .rectSelect {
         didSet { if tool != .crop { cropRect = nil } }
@@ -177,22 +190,18 @@ final class AppModel: ObservableObject {
 
     // MARK: - 合成
 
+    /// レイヤー変更後に呼ぶ。合成は GPU 上で行われ、CPU への読み戻しは発生しない
+    /// （保存・エクスポート・統合などのコールドパスは従来どおり CPU の Compositor を直接使う）。
     func recomposite() {
         compositeBounds = Compositor.unionBounds(layers: layers, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
-        composite = Compositor.composite(layers: layers, bounds: compositeBounds)
-        if let img = composite {
-            compositePixels = PixelBuffer(cgImage: img)
-        } else {
-            compositePixels = nil
-        }
+        gpuCompositor?.composite(layers: layers, bounds: compositeBounds)
     }
 
-    /// キャンバス座標の合成済みピクセル色（ルーペ・スポイト用）
+    /// キャンバス座標の合成済みピクセル色（ルーペ・スポイト用、GPU から1ピクセル読み出し）
     func compositeColor(atCanvas p: CGPoint) -> PixelColor? {
-        guard let buf = compositePixels else { return nil }
         let x = Int(p.x.rounded(.down)) - Int(compositeBounds.minX)
         let y = Int(p.y.rounded(.down)) - Int(compositeBounds.minY)
-        return buf.color(x: x, y: y)
+        return gpuCompositor?.readPixel(x: x, y: y)
     }
 
     // MARK: - 座標変換（キャンバス座標 ↔ ビュー座標）
@@ -405,5 +414,48 @@ final class AppModel: ObservableObject {
         if let m = keyDownMonitor {
             NSEvent.removeMonitor(m)
         }
+    }
+}
+
+// MARK: - ビュー幾何ヘルパー（CanvasView と Metal レンダラーで共用）
+
+extension AppModel {
+
+    /// キャンバス座標 → ビュー座標のアフィン変換
+    var canvasToViewAffine: CGAffineTransform {
+        let c = canvasCenter
+        return CGAffineTransform(translationX: viewSize.width / 2 + panOffset.width - c.x * zoom,
+                                 y: viewSize.height / 2 + panOffset.height - c.y * zoom)
+            .scaledBy(x: zoom, y: zoom)
+    }
+
+    struct TransformHandles {
+        var corners: [CGPoint]
+        var edges: [CGPoint]
+        var center: CGPoint
+        var cornersBase: [CGPoint]
+        var edgesBase: [CGPoint]
+        var bounds: CGRect
+    }
+
+    /// 変形ツールのハンドル位置（ビュー座標）。選択がなければ nil。
+    func transformHandles() -> TransformHandles? {
+        guard let b = selectionBaseBounds else { return nil }
+        let t = pendingTransform
+        let center = CGPoint(x: b.midX, y: b.midY)
+        let affine = t.affine(center: center).concatenating(canvasToViewAffine)
+
+        let cornersBase = [CGPoint(x: b.minX, y: b.minY), CGPoint(x: b.maxX, y: b.minY),
+                           CGPoint(x: b.maxX, y: b.maxY), CGPoint(x: b.minX, y: b.maxY)]
+        let edgesBase = [CGPoint(x: b.midX, y: b.minY), CGPoint(x: b.maxX, y: b.midY),
+                         CGPoint(x: b.midX, y: b.maxY), CGPoint(x: b.minX, y: b.midY)]
+        return TransformHandles(
+            corners: cornersBase.map { $0.applying(affine) },
+            edges: edgesBase.map { $0.applying(affine) },
+            center: center.applying(t.affine(center: center)).applying(canvasToViewAffine),
+            cornersBase: cornersBase,
+            edgesBase: edgesBase,
+            bounds: b
+        )
     }
 }
