@@ -53,7 +53,10 @@ final class LoupeRenderer: NSObject, MTKViewDelegate {
         }.store(in: &cancellables)
     }
 
-    nonisolated func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+    nonisolated func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        Task { @MainActor [weak view] in view?.needsDisplay = true }
+    }
 
     nonisolated func draw(in view: MTKView) {
         MainActor.assumeIsolated {
@@ -82,7 +85,8 @@ final class LoupeRenderer: NSObject, MTKViewDelegate {
 
         let viewSize = view.bounds.size
         let scale = view.window?.backingScaleFactor ?? 2
-        let factor = CGFloat(model.loupeZoom) / 100
+        // メイン画面倍率と合算：ルーペが常に主画面よりさらに拡大された状態になる
+        let factor = CGFloat(model.loupeZoom) / 100 * model.zoom
         let p = cursorPos(model)
         var viewU = ViewUniforms(viewSize: [Float(viewSize.width), Float(viewSize.height)])
 
@@ -121,7 +125,7 @@ final class LoupeRenderer: NSObject, MTKViewDelegate {
             enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: verts.count)
         }
 
-        // グリッド・十字・情報テキスト
+        // グリッド・十字マーカー（色情報は SwiftUI の LoupeInfoBar に移行）
         let scene = buildOverlay(model: model, viewSize: viewSize, factor: factor, cursor: p)
         overlay.encode(scene: scene, encoder: enc, viewSize: viewSize, scale: scale)
 
@@ -134,20 +138,27 @@ final class LoupeRenderer: NSObject, MTKViewDelegate {
                               factor: CGFloat, cursor: CGPoint) -> OverlayScene {
         var s = OverlayScene()
 
-        // ピクセルグリッド（200% 以上で表示）
+        // ピクセルグリッド（200% 以上かつグリッド表示ON）
+        // factor を整数に丸めることで線がサブピクセル位置に落ちず縞々にならない
         if factor >= 2 {
-            let gridColor = NSColor.gray.withAlphaComponent(0.3)
-            var gx: CGFloat = fmod(viewSize.width / 2, factor)
+            let g = max(2, factor.rounded())
+            var gx: CGFloat = fmod(viewSize.width / 2 + g / 2, g)
             while gx < viewSize.width {
+                // 白→黒を同位置に重ねて描くと α合成により結果が [69,115] に収束し
+                // 背景が黒・白どちらでも必ず視認できる中間トーンになる
                 s.stroke([CGPoint(x: gx, y: 0), CGPoint(x: gx, y: viewSize.height)],
-                         width: 0.5, color: gridColor)
-                gx += factor
+                         width: 1, color: NSColor.white.withAlphaComponent(0.55))
+                s.stroke([CGPoint(x: gx, y: 0), CGPoint(x: gx, y: viewSize.height)],
+                         width: 1, color: NSColor.black.withAlphaComponent(0.5))
+                gx += g
             }
-            var gy: CGFloat = fmod(viewSize.height / 2, factor)
+            var gy: CGFloat = fmod(viewSize.height / 2 + g / 2, g)
             while gy < viewSize.height {
                 s.stroke([CGPoint(x: 0, y: gy), CGPoint(x: viewSize.width, y: gy)],
-                         width: 0.5, color: gridColor)
-                gy += factor
+                         width: 1, color: NSColor.white.withAlphaComponent(0.55))
+                s.stroke([CGPoint(x: 0, y: gy), CGPoint(x: viewSize.width, y: gy)],
+                         width: 1, color: NSColor.black.withAlphaComponent(0.5))
+                gy += g
             }
         }
 
@@ -158,16 +169,6 @@ final class LoupeRenderer: NSObject, MTKViewDelegate {
         s.strokeEllipse(in: CGRect(x: cx - 5, y: cy - 5, width: 10, height: 10),
                         width: 1.5, color: .red)
 
-        // 座標・RGB 情報
-        let px = Int(cursor.x.rounded(.down)), py = Int(cursor.y.rounded(.down))
-        let info: String
-        if let c = model.compositeColor(atCanvas: cursor) {
-            info = "X:\(px) Y:\(py)  RGB:\(c.r),\(c.g),\(c.b)  \(c.hexString)"
-        } else {
-            info = "X:\(px) Y:\(py)"
-        }
-        s.text(info, at: CGPoint(x: 4, y: viewSize.height - 4), anchor: .bottomLeading,
-               fontSize: 9, color: .white, monospacedDigit: true)
         return s
     }
 }

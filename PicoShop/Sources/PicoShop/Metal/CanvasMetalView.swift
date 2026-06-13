@@ -194,11 +194,13 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
         s.stroke([CGPoint(x: center.x, y: canvasRect.minY), CGPoint(x: center.x, y: canvasRect.maxY)],
                  color: crossColor, dash: crossDash)
 
-        // ドラッグ中の矩形プレビュー
+        // ドラッグ中の矩形プレビュー（白+黒の交互破線で背景色に依存しない視認性を確保）
         if let r = previewRect {
             let vr = r.applying(toView)
-            s.fill(vr, color: accent.withAlphaComponent(0.12))
-            s.strokeRect(vr, width: 1, color: accent)
+            s.fill(vr, color: NSColor.white.withAlphaComponent(0.08))
+            let phase = CGFloat(CACurrentMediaTime() * 20).truncatingRemainder(dividingBy: 10)
+            s.strokeRect(vr, width: 1, color: .white, dash: .init(on: 5, off: 5, phase: phase))
+            s.strokeRect(vr, width: 1, color: .black, dash: .init(on: 5, off: 5, phase: phase + 5))
         }
 
         // クロップ範囲

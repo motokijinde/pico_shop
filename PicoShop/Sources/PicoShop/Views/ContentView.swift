@@ -24,13 +24,9 @@ struct ContentView: View {
                 Divider()
                 StatusBarView()
             }
-
-            // ルーペオーバーレイ（メインウィンドウ内フローティング）
-            if model.showLoupe {
-                LoupeOverlayView()
-                    .position(model.loupePosition)
-            }
         }
+        // ルーペを NSPanel として管理（OS がウィンドウ移動を直接処理するためゼロ遅延）
+        .background(LoupePanelManager().frame(width: 0, height: 0))
         .sheet(isPresented: $model.showNewFileDialog) { NewFileDialog() }
         .sheet(isPresented: $model.showCanvasSizeDialog) { CanvasSizeDialog() }
         .sheet(isPresented: $model.showModifySelectionDialog) { ModifySelectionDialog() }
@@ -151,7 +147,7 @@ struct StatusBarView: View {
     @EnvironmentObject var model: AppModel
 
     private var selectionText: String? {
-        guard let b = model.selection?.bounds() else { return nil }
+        guard let b = model.selectionBounds else { return nil }
         return "\(Int(b.width))×\(Int(b.height))"
     }
 

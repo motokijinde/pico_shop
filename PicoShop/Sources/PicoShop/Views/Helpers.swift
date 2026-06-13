@@ -12,7 +12,7 @@ extension Binding where Value == PixelColor {
     }
 }
 
-// MARK: - 数値テキストフィールド（Enter で確定）
+// MARK: - 数値スピナーフィールド（テキスト入力 + macOS 標準 NSStepper）
 
 struct NumberField: View {
     let label: String
@@ -29,28 +29,16 @@ struct NumberField: View {
                     .foregroundStyle(.secondary)
             }
             HStack(spacing: 0) {
-                Button { stepValue(-step) } label: {
-                    Image(systemName: "minus")
-                        .font(.system(size: 8, weight: .semibold))
-                        .frame(width: 18, height: 22)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
-
                 TextField("", text: $text)
                     .textFieldStyle(.roundedBorder)
                     .font(.caption.monospacedDigit())
                     .frame(width: width)
                     .multilineTextAlignment(.trailing)
                     .onSubmit { onCommit() }
-
-                Button { stepValue(step) } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 8, weight: .semibold))
-                        .frame(width: 18, height: 22)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
+                Stepper("", onIncrement: { stepValue(step) },
+                              onDecrement: { stepValue(-step) })
+                    .labelsHidden()
+                    .controlSize(.mini)
             }
         }
     }

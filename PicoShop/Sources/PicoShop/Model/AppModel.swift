@@ -11,8 +11,20 @@ final class AppModel: ObservableObject {
     @Published var canvasHeight: Int = 768
     @Published var selection: SelectionMask? {
         didSet {
-            selectionPath = selection?.boundaryPath()
+            // bounds はメインスレッドで同期計算（StatusBar 等が毎フレーム呼ぶのを防ぐキャッシュ）
+            selectionBounds = selection?.bounds()
+            selectionPath = nil
             selectionVersion &+= 1
+            let ver = selectionVersion
+            guard let sel = selection else { return }
+            // boundaryPath はメインスレッドをブロックしないようバックグラウンドで計算
+            Task.detached(priority: .userInitiated) { [weak self] in
+                let path = sel.boundaryPath()
+                await MainActor.run { [weak self] in
+                    guard let self, self.selectionVersion == ver else { return }
+                    self.selectionPath = path
+                }
+            }
         }
     }
 
@@ -20,8 +32,11 @@ final class AppModel: ObservableObject {
     private(set) var selectionVersion: UInt64 = 0
     @Published var activeLayerID: UUID?
 
-    /// マーチングアンツ用の境界パス（selection 変更時に再計算されるキャッシュ）
-    private(set) var selectionPath: Path?
+    /// マーチングアンツ用の境界パス（selection 変更時に非同期で再計算されるキャッシュ）
+    @Published private(set) var selectionPath: Path?
+
+    /// 選択範囲の bbox キャッシュ（selection 変更時に同期更新、StatusBar 等が毎レンダーで呼ばないように）
+    private(set) var selectionBounds: CGRect?
 
     @Published private(set) var compositeBounds: CGRect = CGRect(x: 0, y: 0, width: 1024, height: 768)
 
@@ -54,8 +69,6 @@ final class AppModel: ObservableObject {
     @Published var showLayersPanel = true
     @Published var showToolbar = true
     @Published var loupeZoom: Int = 400      // 100/200/400/800
-    @Published var loupePosition: CGPoint = CGPoint(x: 220, y: 220)
-    @Published var loupeIsLarge: Bool = false
 
     @Published var statusMessage: String?
 
@@ -78,11 +91,12 @@ final class AppModel: ObservableObject {
 
     /// 選択範囲変形（適用前のプレビュー状態）
     @Published var pendingTransform = SelectionTransform()
-    /// 変形パネル・矩形選択の「アスペクト比維持」トグル
+    /// 変形パネル・矩形選択のオプション
     @Published var transformKeepAspect = false
     @Published var rectSelKeepAspect = false
-    /// 変形前のマスク bbox（数値フィールド用）
-    var selectionBaseBounds: CGRect? { selection?.bounds() }
+    @Published var rectSelFromCenter = false
+    /// 変形前のマスク bbox（数値フィールド用）— selectionBounds キャッシュを参照
+    var selectionBaseBounds: CGRect? { selectionBounds }
 
     /// クロップツールの保留矩形（キャンバス座標）
     @Published var cropRect: CGRect?

@@ -8,7 +8,7 @@ struct CanvasView: View {
 
     private enum DragAction {
         case pan(base: CGSize)
-        case rectSelect(start: CGPoint, aspect: CGFloat?)
+        case rectSelect(start: CGPoint, aspect: CGFloat?, fromCenter: Bool)
         case lasso
         case brush
         case moveLayer(baseX: Int, baseY: Int, start: CGPoint)
@@ -107,7 +107,8 @@ struct CanvasView: View {
             } else if model.rectSelKeepAspect {
                 aspect = 1
             }
-            return .rectSelect(start: canvasPoint, aspect: aspect)
+            return .rectSelect(start: canvasPoint, aspect: aspect,
+                               fromCenter: model.rectSelFromCenter)
 
         case .freehandSelect:
             lassoPoints = [canvasPoint]
@@ -174,17 +175,32 @@ struct CanvasView: View {
 
     private func updateDrag(_ v: DragGesture.Value, canvasP: CGPoint) {
         guard let action = dragAction else { return }
+        // ドラッグ中もルーペにカーソル位置を伝える
+        model.mouseCanvasPos = canvasP
         switch action {
         case .pan(let base):
             model.panOffset = CGSize(width: base.width + v.translation.width,
                                      height: base.height + v.translation.height)
 
-        case .rectSelect(let start, let aspect):
-            var r = normalizedRect(from: start, to: canvasP)
-            if let aspect, aspect > 0 {
-                let h = r.width / aspect
-                r = CGRect(x: r.minX, y: canvasP.y < start.y ? start.y - h : r.minY,
-                           width: r.width, height: h)
+        case .rectSelect(let start, let aspect, let fromCenter):
+            var r: CGRect
+            if fromCenter {
+                let halfW = abs(canvasP.x - start.x)
+                var halfH = abs(canvasP.y - start.y)
+                if let asp = aspect, asp > 0, halfW > 0 {
+                    halfH = halfW / asp
+                }
+                r = CGRect(x: (start.x - halfW).rounded(.down),
+                           y: (start.y - halfH).rounded(.down),
+                           width: (halfW * 2).rounded(),
+                           height: (halfH * 2).rounded())
+            } else {
+                r = normalizedRect(from: start, to: canvasP)
+                if let aspect, aspect > 0 {
+                    let h = r.width / aspect
+                    r = CGRect(x: r.minX, y: canvasP.y < start.y ? start.y - h : r.minY,
+                               width: r.width, height: h)
+                }
             }
             previewRect = r
 
@@ -261,7 +277,7 @@ struct CanvasView: View {
         let isClick = distance(v.startLocation, v.location) < 3
 
         switch dragAction {
-        case .rectSelect:
+        case .rectSelect(_, _, _):
             if let r = previewRect, r.width >= 1, r.height >= 1 {
                 model.applySelection(
                     SelectionMask.rect(width: model.canvasWidth, height: model.canvasHeight, rect: r),
@@ -349,7 +365,13 @@ struct CanvasView: View {
             return
         }
         switch model.tool {
-        case .rectSelect, .freehandSelect, .colorRangeSelect:
+        case .rectSelect, .freehandSelect:
+            switch model.selectionOperationMode {
+            case .replace:  Self.selectionBaseCursor.set()
+            case .add:      Self.selectionAddCursor.set()
+            case .subtract: Self.selectionSubtractCursor.set()
+            }
+        case .colorRangeSelect:
             NSCursor.crosshair.set()
         case .maskBrush:
             NSCursor.crosshair.set()
@@ -435,5 +457,57 @@ private extension Double {
     func clampedMagnitude(min minMag: Double) -> Double {
         if abs(self) < minMag { return self < 0 ? -minMag : minMag }
         return self
+    }
+}
+
+// MARK: - カスタムカーソル（選択操作モードバッジ付き）
+
+private extension CanvasView {
+    static let selectionBaseCursor:     NSCursor = makeSelectionCursor()
+    static let selectionAddCursor:      NSCursor = makeSelectionCursor(badge: "+")
+    static let selectionSubtractCursor: NSCursor = makeSelectionCursor(badge: "−")
+
+    static func makeSelectionCursor(badge: String? = nil) -> NSCursor {
+        let size: CGFloat = 20
+        let img = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            let cx = size / 2, cy = size / 2
+            let gap: CGFloat = 4  // 中心の空白
+
+            ctx.setLineCap(.round)
+
+            // 白ハロー
+            ctx.setLineWidth(2.5)
+            ctx.setStrokeColor(NSColor.white.cgColor)
+            ctx.move(to: CGPoint(x: cx, y: 1));        ctx.addLine(to: CGPoint(x: cx, y: cy - gap))
+            ctx.move(to: CGPoint(x: cx, y: cy + gap)); ctx.addLine(to: CGPoint(x: cx, y: size - 1))
+            ctx.move(to: CGPoint(x: 1, y: cy));        ctx.addLine(to: CGPoint(x: cx - gap, y: cy))
+            ctx.move(to: CGPoint(x: cx + gap, y: cy)); ctx.addLine(to: CGPoint(x: size - 1, y: cy))
+            ctx.strokePath()
+
+            // 黒クロスヘア
+            ctx.setLineWidth(1.5)
+            ctx.setStrokeColor(NSColor.black.cgColor)
+            ctx.move(to: CGPoint(x: cx, y: 1));        ctx.addLine(to: CGPoint(x: cx, y: cy - gap))
+            ctx.move(to: CGPoint(x: cx, y: cy + gap)); ctx.addLine(to: CGPoint(x: cx, y: size - 1))
+            ctx.move(to: CGPoint(x: 1, y: cy));        ctx.addLine(to: CGPoint(x: cx - gap, y: cy))
+            ctx.move(to: CGPoint(x: cx + gap, y: cy)); ctx.addLine(to: CGPoint(x: size - 1, y: cy))
+            ctx.strokePath()
+
+            // バッジ（+/− のみ、通常選択はなし）
+            if let badge {
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.boldSystemFont(ofSize: 8),
+                    .foregroundColor: NSColor.black,
+                    .strokeColor: NSColor.white,
+                    .strokeWidth: -2.5
+                ]
+                NSAttributedString(string: badge, attributes: attrs)
+                    .draw(at: NSPoint(x: cx + 3, y: 1))
+            }
+            return true
+        }
+        img.isTemplate = false
+        return NSCursor(image: img, hotSpot: NSPoint(x: size / 2, y: size / 2))
     }
 }

@@ -106,6 +106,9 @@ struct RectSelectOptionsView: View {
                 Toggle("アスペクト比維持", isOn: $model.rectSelKeepAspect)
                     .font(.caption)
                     .controlSize(.small)
+                Toggle("中央から選択", isOn: $model.rectSelFromCenter)
+                    .font(.caption)
+                    .controlSize(.small)
             }
         }
         .onAppear { sync() }
