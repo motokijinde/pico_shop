@@ -61,6 +61,14 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
     private var antsMesh: StrokeMesh?
     private var antsMeshVersion: UInt64 = .max
 
+    /// バウンディングボックス破線用キャッシュ（selection != nil のとき）
+    private var bboxMesh: StrokeMesh?
+    private var bboxMeshVersion: UInt64 = .max
+
+    /// selectionTransform + selection == nil のとき使うレイヤー境界メッシュ
+    private var layerBoundsMesh: StrokeMesh?
+    private var layerBoundsMeshKey: String = ""
+
     func attach(model: AppModel, view: MTKView) {
         self.model = model
         self.view = view
@@ -116,9 +124,11 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
         cmd.commit()
     }
 
-    /// 選択範囲があるときだけ連続描画（アンツのアニメ）、それ以外はイベント駆動
+    /// 選択範囲がある・selectionTransform ツール使用中・ドラッグ中は連続描画（アンツのアニメ）、それ以外はイベント駆動
     private func syncAnimationMode(view: MTKView, model: AppModel) {
         let wantsContinuous = model.selection != nil
+            || (model.tool == .selectionTransform && model.activeLayer != nil)
+            || model.isDraggingTransform
         if wantsContinuous == view.isPaused {
             view.isPaused = !wantsContinuous
             view.enableSetNeedsDisplay = !wantsContinuous
@@ -223,8 +233,39 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
                             width: 1, color: model.brushOpts.add ? .green : .red)
         }
 
-        // 変形ハンドル（変形ツールのみ）
-        if model.tool == .transform, let h = model.transformHandles() {
+        // 変形ハンドル（変形ツール・選択変形ツール）
+        if (model.tool == .transform || model.tool == .selectionTransform),
+           let h = model.transformHandles() {
+            // バウンディングボックス破線（selection != nil のみ。== nil は buildMarchingAnts が担当）
+            // .strokeCached で毎フレームのテッセレーションを回避する
+            if model.selection != nil, let b = model.selectionBaseBounds, let eng = engine {
+                if bboxMeshVersion != model.selectionVersion {
+                    let pts: [CGPoint] = [
+                        CGPoint(x: b.minX, y: b.minY), CGPoint(x: b.maxX, y: b.minY),
+                        CGPoint(x: b.maxX, y: b.maxY), CGPoint(x: b.minX, y: b.maxY),
+                        CGPoint(x: b.minX, y: b.minY)
+                    ]
+                    bboxMesh = StrokeMesh(device: eng.device, polylines: [pts], closed: false)
+                    bboxMeshVersion = model.selectionVersion
+                }
+                if let mesh = bboxMesh {
+                    let activeTransform = model.dragPreviewTransform ?? model.pendingTransform
+                    var affine = model.canvasToViewAffine
+                    if !activeTransform.isIdentity {
+                        affine = activeTransform
+                            .affine(center: CGPoint(x: b.midX, y: b.midY))
+                            .concatenating(affine)
+                    }
+                    let bboxTransform = OverlayScene.Transform2D(affine: affine)
+                    let bboxPhase = CGFloat(CACurrentMediaTime() * 20).truncatingRemainder(dividingBy: 8)
+                    s.items.append(.strokeCached(mesh: mesh, width: 1, color: .white,
+                                                 dash: .init(on: 4, off: 4, phase: bboxPhase),
+                                                 transform: bboxTransform))
+                    s.items.append(.strokeCached(mesh: mesh, width: 1, color: .black,
+                                                 dash: .init(on: 4, off: 4, phase: bboxPhase + 4),
+                                                 transform: bboxTransform))
+                }
+            }
             for p in h.corners + h.edges {
                 let r = CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8)
                 s.fill(r, color: .white)
@@ -241,6 +282,39 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
     }
 
     private func buildMarchingAnts(_ s: inout OverlayScene, model: AppModel) {
+        // selectionTransform + selection == nil → レイヤー全体の破線矩形
+        if model.tool == .selectionTransform, model.selection == nil,
+           let layer = model.activeLayer, let eng = engine {
+            let rect = CGRect(x: CGFloat(layer.offsetX), y: CGFloat(layer.offsetY),
+                              width: CGFloat(layer.buffer.width), height: CGFloat(layer.buffer.height))
+            let key = "\(layer.offsetX),\(layer.offsetY),\(layer.buffer.width),\(layer.buffer.height)"
+            if key != layerBoundsMeshKey {
+                let pts: [CGPoint] = [
+                    CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY),
+                    CGPoint(x: rect.maxX, y: rect.maxY), CGPoint(x: rect.minX, y: rect.maxY),
+                    CGPoint(x: rect.minX, y: rect.minY)
+                ]
+                layerBoundsMesh = StrokeMesh(device: eng.device, polylines: [pts], closed: false)
+                layerBoundsMeshKey = key
+            }
+            if let mesh = layerBoundsMesh {
+                let activeTransform = model.dragPreviewTransform ?? model.pendingTransform
+                var affine = model.canvasToViewAffine
+                if !activeTransform.isIdentity {
+                    affine = activeTransform
+                        .affine(center: CGPoint(x: rect.midX, y: rect.midY))
+                        .concatenating(affine)
+                }
+                let transform = OverlayScene.Transform2D(affine: affine)
+                let phase = CGFloat(CACurrentMediaTime() * 20).truncatingRemainder(dividingBy: 10)
+                s.items.append(.strokeCached(mesh: mesh, width: 1, color: .white,
+                                             dash: .init(on: 5, off: 5, phase: phase), transform: transform))
+                s.items.append(.strokeCached(mesh: mesh, width: 1, color: .black,
+                                             dash: .init(on: 5, off: 5, phase: phase + 5), transform: transform))
+            }
+            return
+        }
+
         guard model.selection != nil, let path = model.selectionPath else { return }
 
         if antsMeshVersion != model.selectionVersion {
@@ -251,13 +325,16 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
         }
         guard let mesh = antsMesh else { return }
 
-        // pendingTransform のプレビューは変形ツールのみ適用
+        // pendingTransform のプレビューは変形ツール・選択変形ツールで適用（ドラッグ中は dragPreviewTransform を優先）
         var affine = model.canvasToViewAffine
-        if model.tool == .transform, !model.pendingTransform.isIdentity,
+        if (model.tool == .transform || model.tool == .selectionTransform),
            let b = model.selectionBaseBounds {
-            affine = model.pendingTransform
-                .affine(center: CGPoint(x: b.midX, y: b.midY))
-                .concatenating(affine)
+            let activeTransform = model.dragPreviewTransform ?? model.pendingTransform
+            if !activeTransform.isIdentity {
+                affine = activeTransform
+                    .affine(center: CGPoint(x: b.midX, y: b.midY))
+                    .concatenating(affine)
+            }
         }
         let transform = OverlayScene.Transform2D(affine: affine)
         let phase = CGFloat(CACurrentMediaTime() * 20).truncatingRemainder(dividingBy: 10)

@@ -29,29 +29,24 @@ struct PicoShopApp: App {
                     .keyboardShortcut("e", modifiers: [.command, .shift])
             }
 
-            // MARK: 編集
-            CommandGroup(replacing: .undoRedo) {
+            // MARK: 編集（システムの Edit メニューを空にして独自メニューを立てる）
+            CommandGroup(replacing: .undoRedo) { }
+            CommandGroup(replacing: .pasteboard) { }
+            CommandMenu("編集") {
                 Button("アンドゥ\(model.undoLabel.map { " \($0)" } ?? "")") { model.undo() }
                     .keyboardShortcut("z", modifiers: .command)
                     .disabled(model.undoStack.isEmpty)
                 Button("リドゥ\(model.redoLabel.map { " \($0)" } ?? "")") { model.redo() }
                     .keyboardShortcut("z", modifiers: [.command, .shift])
                     .disabled(model.redoStack.isEmpty)
-            }
-            CommandGroup(replacing: .pasteboard) {
+                Divider()
+                Button("カット") { model.cutSelection() }
+                    .keyboardShortcut("x", modifiers: .command)
                 Button("コピー") { model.copySelectionToPasteboard() }
                     .keyboardShortcut("c", modifiers: .command)
                 Button("ペースト") { model.pasteFromPasteboard() }
                     .keyboardShortcut("v", modifiers: .command)
                 Divider()
-                Button("カット（選択範囲を透明化）") { model.cutSelection() }
-                    .keyboardShortcut("x", modifiers: .command)
-                Divider()
-                Picker("モード", selection: $model.toolTargetMode) {
-                    ForEach(ToolTargetMode.allCases) { m in
-                        Text(m.displayName).tag(m)
-                    }
-                }
                 Menu("反転") {
                     Button("水平反転") { model.flip(horizontal: true) }
                     Button("垂直反転") { model.flip(horizontal: false) }

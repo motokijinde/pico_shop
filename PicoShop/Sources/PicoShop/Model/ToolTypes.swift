@@ -7,7 +7,9 @@ enum Tool: String, CaseIterable, Identifiable {
     case freehandSelect
     case colorRangeSelect
     case maskBrush
+    case selectionTransform
     case move
+    case layerMove
     case transform
     case fill
     case resize
@@ -21,37 +23,41 @@ enum Tool: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .rectSelect:       return "矩形選択"
-        case .freehandSelect:   return "フリーハンド選択"
-        case .colorRangeSelect: return "色域選択"
-        case .maskBrush:        return "マスクブラシ"
-        case .move:             return "移動"
-        case .transform:        return "変形"
-        case .fill:             return "塗りつぶし"
-        case .resize:           return "リサイズ"
-        case .text:             return "テキスト"
-        case .crop:             return "クロップ"
-        case .rotate:           return "回転"
-        case .flip:             return "反転"
-        case .eyedropper:       return "スポイト"
+        case .rectSelect:         return "矩形選択"
+        case .freehandSelect:     return "フリーハンド選択"
+        case .colorRangeSelect:   return "色域選択"
+        case .maskBrush:          return "マスクブラシ"
+        case .selectionTransform: return "選択変形"
+        case .move:               return "移動"
+        case .layerMove:          return "レイヤー移動"
+        case .transform:          return "変形"
+        case .fill:               return "塗りつぶし"
+        case .resize:             return "リサイズ"
+        case .text:               return "テキスト"
+        case .crop:               return "クロップ"
+        case .rotate:             return "回転"
+        case .flip:               return "反転"
+        case .eyedropper:         return "スポイト"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .rectSelect:       return "rectangle.dashed"
-        case .freehandSelect:   return "lasso"
-        case .colorRangeSelect: return "wand.and.rays"
-        case .maskBrush:        return "paintbrush.pointed"
-        case .move:             return "arrow.up.and.down.and.arrow.left.and.right"
-        case .transform:        return "crop.rotate"
-        case .fill:             return "paintbrush.fill"
-        case .resize:           return "arrow.up.left.and.arrow.down.right"
-        case .text:             return "textformat"
-        case .crop:             return "crop"
-        case .rotate:           return "rotate.right"
-        case .flip:             return "arrow.left.and.right.righttriangle.left.righttriangle.right"
-        case .eyedropper:       return "eyedropper"
+        case .rectSelect:         return "rectangle.dashed"
+        case .freehandSelect:     return "lasso"
+        case .colorRangeSelect:   return "wand.and.rays"
+        case .maskBrush:          return "paintbrush.pointed"
+        case .selectionTransform: return "selection.pin.in.out"
+        case .move:               return "arrow.up.and.down.and.arrow.left.and.right"
+        case .layerMove:          return "hand.draw"
+        case .transform:          return "crop.rotate"
+        case .fill:               return "paintbrush.fill"
+        case .resize:             return "arrow.up.left.and.arrow.down.right"
+        case .text:               return "textformat"
+        case .crop:               return "crop"
+        case .rotate:             return "rotate.right"
+        case .flip:               return "arrow.left.and.right.righttriangle.left.righttriangle.right"
+        case .eyedropper:         return "eyedropper"
         }
     }
 
@@ -59,14 +65,6 @@ enum Tool: String, CaseIterable, Identifiable {
     var isSelectionTool: Bool {
         switch self {
         case .rectSelect, .freehandSelect, .colorRangeSelect: return true
-        default: return false
-        }
-    }
-
-    /// レイヤー/選択モード切り替えの対象ツール（仕様 12-4-3）
-    var supportsModeSwitch: Bool {
-        switch self {
-        case .move, .rotate, .resize, .flip: return true
         default: return false
         }
     }
@@ -96,16 +94,6 @@ enum SelectionOperationMode: String, CaseIterable, Identifiable {
         case .subtract: return "rectangle.badge.minus"
         }
     }
-}
-
-// MARK: - レイヤーモード / 選択モード（仕様 12-4）
-
-enum ToolTargetMode: String, CaseIterable, Identifiable {
-    case layer
-    case selection
-
-    var id: String { rawValue }
-    var displayName: String { self == .layer ? "レイヤーモード" : "選択モード" }
 }
 
 // MARK: - ツールオプション

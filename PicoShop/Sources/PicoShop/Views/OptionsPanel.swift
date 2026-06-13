@@ -11,33 +11,22 @@ struct OptionsPanel: View {
                 .font(.caption.bold())
                 .foregroundStyle(.secondary)
 
-            // レイヤー/選択モード切り替え（対象ツールのみ：仕様 12-4-3）
-            if model.tool.supportsModeSwitch {
-                Picker("", selection: $model.toolTargetMode) {
-                    ForEach(ToolTargetMode.allCases) { m in
-                        Label(m.displayName,
-                              systemImage: m == .layer ? "square.3.layers.3d" : "rectangle.dashed")
-                            .tag(m)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .controlSize(.small)
-            }
-
             switch model.tool {
-            case .rectSelect:       RectSelectOptionsView()
-            case .freehandSelect:   FreehandSelectOptionsView()
-            case .colorRangeSelect: ColorRangeSelectOptionsView()
-            case .maskBrush:        MaskBrushOptionsView()
-            case .move:             MoveToolOptions()
-            case .transform:        TransformToolOptionsView()
-            case .fill:             FillToolOptions()
-            case .resize:           ResizeToolOptions()
-            case .text:             TextToolOptions()
-            case .crop:             CropToolOptions()
-            case .rotate:           RotateToolOptions()
-            case .flip:             FlipToolOptions()
-            case .eyedropper:       EyedropperOptions()
+            case .rectSelect:         RectSelectOptionsView()
+            case .freehandSelect:     FreehandSelectOptionsView()
+            case .colorRangeSelect:   ColorRangeSelectOptionsView()
+            case .maskBrush:          MaskBrushOptionsView()
+            case .selectionTransform: SelectionTransformOptionsView()
+            case .move:               MoveToolOptions()
+            case .layerMove:          LayerMoveToolOptions()
+            case .transform:          TransformToolOptionsView()
+            case .fill:               FillToolOptions()
+            case .resize:             ResizeToolOptions()
+            case .text:               TextToolOptions()
+            case .crop:               CropToolOptions()
+            case .rotate:             RotateToolOptions()
+            case .flip:               FlipToolOptions()
+            case .eyedropper:         EyedropperOptions()
             }
         }
     }
@@ -78,13 +67,10 @@ struct SelectionModeButtons: View {
 }
 
 // MARK: - 矩形選択（仕様 7-3）
+// W/H/X/Y フィールドは選択変形ツールに移動
 
 struct RectSelectOptionsView: View {
     @EnvironmentObject var model: AppModel
-    @State private var wText = ""
-    @State private var hText = ""
-    @State private var xText = ""
-    @State private var yText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -94,15 +80,6 @@ struct RectSelectOptionsView: View {
                 Text("キャンバス上をドラッグして矩形を選択します")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-
-                HStack(spacing: 6) {
-                    NumberField(label: "幅", text: $wText, width: 48) { commit() }
-                    NumberField(label: "高さ", text: $hText, width: 48) { commit() }
-                }
-                HStack(spacing: 6) {
-                    NumberField(label: "X", text: $xText, width: 48) { commit() }
-                    NumberField(label: "Y", text: $yText, width: 48) { commit() }
-                }
                 Toggle("アスペクト比維持", isOn: $model.rectSelKeepAspect)
                     .font(.caption)
                     .controlSize(.small)
@@ -111,24 +88,6 @@ struct RectSelectOptionsView: View {
                     .controlSize(.small)
             }
         }
-        .onAppear { sync() }
-        .onChange(of: model.selection?.bounds()) { sync() }
-    }
-
-    private func sync() {
-        guard let b = model.selection?.bounds() else { return }
-        wText = String(Int(b.width)); hText = String(Int(b.height))
-        xText = String(Int(b.minX)); yText = String(Int(b.minY))
-    }
-
-    private func commit() {
-        guard let w = Double(wText), let h = Double(hText),
-              let x = Double(xText), let y = Double(yText), w >= 1, h >= 1 else { return }
-        model.applySelection(
-            SelectionMask.rect(width: model.canvasWidth, height: model.canvasHeight,
-                               rect: CGRect(x: x, y: y, width: w, height: h)),
-            label: "矩形選択"
-        )
     }
 }
 
@@ -258,29 +217,11 @@ struct MaskBrushOptionsView: View {
     }
 }
 
-// MARK: - 変形ツール（仕様 7-5）
+// MARK: - 選択変形ツール
+// 選択マスクの移動・リサイズ・回転。W/H/X/Y は即時反映。
+// バウンディングボックスドラッグはドロップ時に自動適用。
 
-struct TransformToolOptionsView: View {
-    @EnvironmentObject var model: AppModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if model.selection == nil {
-                OptionSection(title: "変形") {
-                    Text("先に選択ツールで範囲を選択してください")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                SelectionTransformPanel()
-            }
-        }
-    }
-}
-
-// MARK: - 選択範囲の変形パネル
-
-struct SelectionTransformPanel: View {
+struct SelectionTransformOptionsView: View {
     @EnvironmentObject var model: AppModel
     @State private var wText = ""
     @State private var hText = ""
@@ -288,46 +229,196 @@ struct SelectionTransformPanel: View {
     @State private var yText = ""
     @State private var rotText = ""
 
+    private var baseBounds: CGRect? {
+        if let b = model.selectionBaseBounds { return b }
+        guard let layer = model.activeLayer else { return nil }
+        return CGRect(x: CGFloat(layer.offsetX), y: CGFloat(layer.offsetY),
+                      width: CGFloat(layer.buffer.width), height: CGFloat(layer.buffer.height))
+    }
+
     var body: some View {
-        OptionSection(title: "選択範囲変形") {
-            if let b = model.selectionBaseBounds {
-                Text("元: \(Int(b.width)) × \(Int(b.height)) px")
+        OptionSection(title: "選択変形") {
+            if baseBounds != nil {
+                HStack(spacing: 6) {
+                    NumberField(label: "X",  text: $xText, width: 48, labelWidth: 20) { commitPosition() }
+                    NumberField(label: "Y",  text: $yText, width: 48, labelWidth: 20) { commitPosition() }
+                }
+                HStack(spacing: 6) {
+                    NumberField(label: "幅", text: $wText, width: 48, labelWidth: 20) { commitSize() }
+                    NumberField(label: "高さ", text: $hText, width: 48, labelWidth: 20) { commitSize() }
+                }
+                NumberField(label: "回転(°)", text: $rotText, width: 48) {
+                    if let v = Double(rotText) {
+                        var deg = v.truncatingRemainder(dividingBy: 360)
+                        if deg < 0 { deg += 360 }
+                        model.pendingTransform.rotation = deg
+                    }
+                }
+                HStack(spacing: 4) {
+                    Button("確定") { model.applySelectionTransform() }
+                        .disabled(model.pendingTransform.isIdentity)
+                    Button("リセット") { model.resetSelectionTransform() }
+                        .disabled(model.pendingTransform.isIdentity)
+                }
+                .controlSize(.small)
+            } else {
+                Text("レイヤーがありません")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            HStack(spacing: 6) {
-                NumberField(label: "幅", text: $wText, width: 48) { commitSize() }
-                NumberField(label: "高さ", text: $hText, width: 48) { commitSize() }
-            }
-            HStack(spacing: 6) {
-                NumberField(label: "X", text: $xText, width: 48) { commitPosition() }
-                NumberField(label: "Y", text: $yText, width: 48) { commitPosition() }
-            }
-            NumberField(label: "回転(°)", text: $rotText, width: 48) {
-                if let v = Double(rotText) {
-                    model.pendingTransform.rotation = v.truncatingRemainder(dividingBy: 360)
-                }
-            }
-            Toggle("アスペクト比維持", isOn: $model.transformKeepAspect)
-                .font(.caption)
-                .controlSize(.small)
-
-            HStack(spacing: 4) {
-                Button("適用") { model.applySelectionTransform() }
-                    .disabled(model.pendingTransform.isIdentity)
-                // キャンセル = 変形のリセットのみ（選択は消さない）
-                Button("リセット") { model.resetSelectionTransform() }
-                    .disabled(model.pendingTransform.isIdentity)
-            }
-            .controlSize(.small)
         }
         .onAppear { sync() }
         .onChange(of: model.pendingTransform) { sync() }
         .onChange(of: model.selection?.bounds()) { sync() }
+        .onChange(of: model.activeLayerID) { sync() }
     }
 
     private var transformedRect: CGRect? {
-        guard let b = model.selectionBaseBounds else { return nil }
+        guard let b = baseBounds else { return nil }
+        let t = model.pendingTransform
+        let w = b.width * CGFloat(abs(t.scaleX))
+        let h = b.height * CGFloat(abs(t.scaleY))
+        return CGRect(x: b.midX + CGFloat(t.dx) - w / 2,
+                      y: b.midY + CGFloat(t.dy) - h / 2,
+                      width: w, height: h)
+    }
+
+    private func sync() {
+        if let r = transformedRect {
+            wText = String(Int(r.width.rounded()))
+            hText = String(Int(r.height.rounded()))
+            xText = String(Int(r.minX.rounded()))
+            yText = String(Int(r.minY.rounded()))
+        }
+        rotText = String(Int(model.pendingTransform.rotation.rounded()))
+    }
+
+    private func commitSize() {
+        guard let b = baseBounds, b.width > 0, b.height > 0,
+              let w = Double(wText), let h = Double(hText), w >= 1, h >= 1 else { return }
+        model.pendingTransform.scaleX = max(0.01, w / Double(b.width))
+        model.pendingTransform.scaleY = max(0.01, h / Double(b.height))
+    }
+
+    private func commitPosition() {
+        guard let b = baseBounds,
+              let x = Double(xText), let y = Double(yText) else { return }
+        let t = model.pendingTransform
+        let w = Double(b.width) * abs(t.scaleX)
+        let h = Double(b.height) * abs(t.scaleY)
+        model.pendingTransform.dx = x + w / 2 - Double(b.midX)
+        model.pendingTransform.dy = y + h / 2 - Double(b.midY)
+    }
+}
+
+// MARK: - 移動ツール
+
+struct MoveToolOptions: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        OptionSection(title: "移動") {
+            Text(model.selection == nil
+                 ? "ドラッグまたはカーソルキーで\nアクティブレイヤーを移動します"
+                 : "ドラッグまたはカーソルキーで\n選択内ピクセルを移動します（破壊的）")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text("カーソルキー: 1px 移動")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+// MARK: - レイヤー移動ツール
+
+struct LayerMoveToolOptions: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        OptionSection(title: "レイヤー移動") {
+            Text("選択範囲に関わらず\nアクティブレイヤー全体を移動します（非破壊）")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text("カーソルキー: 1px 移動")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+// MARK: - 変形ツール（選択内ピクセルまたはレイヤー全体を変形）
+
+struct TransformToolOptionsView: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        PixelTransformPanel()
+    }
+}
+
+struct PixelTransformPanel: View {
+    @EnvironmentObject var model: AppModel
+    @State private var wText = ""
+    @State private var hText = ""
+    @State private var xText = ""
+    @State private var yText = ""
+    @State private var rotText = ""
+
+    private var baseBounds: CGRect? {
+        if let sel = model.selectionBaseBounds { return sel }
+        guard let layer = model.activeLayer else { return nil }
+        return CGRect(x: CGFloat(layer.offsetX), y: CGFloat(layer.offsetY),
+                      width: CGFloat(layer.buffer.width), height: CGFloat(layer.buffer.height))
+    }
+
+    var body: some View {
+        OptionSection(title: "変形") {
+            if let b = baseBounds {
+                Text(model.selection == nil
+                     ? "レイヤー: \(Int(b.width)) × \(Int(b.height)) px"
+                     : "選択: \(Int(b.width)) × \(Int(b.height)) px")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 6) {
+                    NumberField(label: "幅", text: $wText, width: 48) { commitSize() }
+                    NumberField(label: "高さ", text: $hText, width: 48) { commitSize() }
+                }
+                HStack(spacing: 6) {
+                    NumberField(label: "X", text: $xText, width: 48) { commitPosition() }
+                    NumberField(label: "Y", text: $yText, width: 48) { commitPosition() }
+                }
+                NumberField(label: "回転(°)", text: $rotText, width: 48) {
+                    if let v = Double(rotText) {
+                        model.pendingTransform.rotation = v.truncatingRemainder(dividingBy: 360)
+                    }
+                }
+                Toggle("アスペクト比維持", isOn: $model.transformKeepAspect)
+                    .font(.caption)
+                    .controlSize(.small)
+
+                HStack(spacing: 4) {
+                    Button("適用") { model.applyPixelTransform() }
+                        .disabled(model.pendingTransform.isIdentity)
+                    Button("リセット") { model.resetSelectionTransform() }
+                        .disabled(model.pendingTransform.isIdentity)
+                }
+                .controlSize(.small)
+            } else {
+                Text("レイヤーがありません")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onAppear { sync() }
+        .onChange(of: model.pendingTransform) { sync() }
+        .onChange(of: model.selection?.bounds()) { sync() }
+        .onChange(of: model.activeLayerID) { sync() }
+    }
+
+    private var transformedRect: CGRect? {
+        guard let b = baseBounds else { return nil }
         let t = model.pendingTransform
         let w = b.width * CGFloat(abs(t.scaleX))
         let h = b.height * CGFloat(abs(t.scaleY))
@@ -346,7 +437,7 @@ struct SelectionTransformPanel: View {
     }
 
     private func commitSize() {
-        guard let b = model.selectionBaseBounds, b.width > 0, b.height > 0,
+        guard let b = baseBounds, b.width > 0, b.height > 0,
               let w = Double(wText), let h = Double(hText), w >= 1, h >= 1 else { return }
         let sx = w / Double(b.width)
         var sy = h / Double(b.height)
@@ -359,32 +450,13 @@ struct SelectionTransformPanel: View {
     }
 
     private func commitPosition() {
-        guard let b = model.selectionBaseBounds,
+        guard let b = baseBounds,
               let x = Double(xText), let y = Double(yText) else { return }
         let t = model.pendingTransform
         let w = Double(b.width) * abs(t.scaleX)
         let h = Double(b.height) * abs(t.scaleY)
         model.pendingTransform.dx = x + w / 2 - Double(b.midX)
         model.pendingTransform.dy = y + h / 2 - Double(b.midY)
-    }
-}
-
-// MARK: - 移動ツール
-
-struct MoveToolOptions: View {
-    @EnvironmentObject var model: AppModel
-
-    var body: some View {
-        OptionSection(title: "移動") {
-            Text(model.toolTargetMode == .layer
-                 ? "ドラッグまたはカーソルキーで\nアクティブレイヤーを移動します"
-                 : "ドラッグまたはカーソルキーで\n選択範囲を移動します")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text("カーソルキー: 1px 移動\nShift+カーソルキー: サイズ変更")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-        }
     }
 }
 
@@ -441,7 +513,7 @@ struct ResizeToolOptions: View {
 
     var body: some View {
         OptionSection(title: "リサイズ") {
-            if model.toolTargetMode == .layer, let layer = model.activeLayer {
+            if model.selection == nil, let layer = model.activeLayer {
                 Text("元: \(layer.buffer.width) × \(layer.buffer.height) px")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -485,7 +557,7 @@ struct ResizeToolOptions: View {
     }
 
     private var baseSize: (w: Int, h: Int)? {
-        if model.toolTargetMode == .selection, let b = model.selectionBaseBounds {
+        if let b = model.selectionBaseBounds {
             return (Int(b.width), Int(b.height))
         }
         guard let layer = model.activeLayer else { return nil }

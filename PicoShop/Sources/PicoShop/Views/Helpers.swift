@@ -18,8 +18,11 @@ struct NumberField: View {
     let label: String
     @Binding var text: String
     var width: CGFloat = 56
+    var labelWidth: CGFloat? = nil
     var step: Double = 1
     var onCommit: () -> Void = {}
+
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(spacing: 4) {
@@ -27,6 +30,7 @@ struct NumberField: View {
                 Text(label)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .frame(width: labelWidth, alignment: .trailing)
             }
             HStack(spacing: 0) {
                 TextField("", text: $text)
@@ -34,7 +38,11 @@ struct NumberField: View {
                     .font(.caption.monospacedDigit())
                     .frame(width: width)
                     .multilineTextAlignment(.trailing)
+                    .focused($isFocused)
                     .onSubmit { onCommit() }
+                    .onChange(of: isFocused) { _, focused in
+                        if !focused { onCommit() }
+                    }
                 Stepper("", onIncrement: { stepValue(step) },
                               onDecrement: { stepValue(-step) })
                     .labelsHidden()

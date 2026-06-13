@@ -59,10 +59,23 @@ final class AppModel: ObservableObject {
     }
 
     @Published var tool: Tool = .rectSelect {
-        didSet { if tool != .crop { cropRect = nil } }
+        didSet {
+            if tool != .crop { cropRect = nil }
+            if oldValue == .selectionTransform && tool != .selectionTransform {
+                applySelectionTransform()
+            }
+        }
     }
     @Published var selectionOperationMode: SelectionOperationMode = .replace
-    @Published var toolTargetMode: ToolTargetMode = .layer
+
+    /// ピクセル移動プレビュー用フローティングレイヤー（move ツールのドラッグ中のみ有効）
+    @Published var floatingLayer: Layer?
+
+    struct PixelMovePreview {
+        var initialLayerOffsetX: Int
+        var initialLayerOffsetY: Int
+    }
+    var pixelMovePreview: PixelMovePreview?
 
     @Published var showLoupe = false
     @Published var showOptionsPanel = true
@@ -91,6 +104,13 @@ final class AppModel: ObservableObject {
 
     /// 選択範囲変形（適用前のプレビュー状態）
     @Published var pendingTransform = SelectionTransform()
+
+    /// ドラッグ中の変形プレビュー（非 @Published — SwiftUI 全体再評価を避けるため）
+    /// Metal が毎フレーム読む。nil のとき pendingTransform を使う。
+    var dragPreviewTransform: SelectionTransform? = nil
+    /// ドラッグ中フラグ（連続描画モードの判定用）
+    var isDraggingTransform: Bool = false
+
     /// 変形パネル・矩形選択のオプション
     @Published var transformKeepAspect = false
     @Published var rectSelKeepAspect = false
@@ -204,11 +224,12 @@ final class AppModel: ObservableObject {
 
     // MARK: - 合成
 
-    /// レイヤー変更後に呼ぶ。合成は GPU 上で行われ、CPU への読み戻しは発生しない
-    /// （保存・エクスポート・統合などのコールドパスは従来どおり CPU の Compositor を直接使う）。
+    /// レイヤー変更後に呼ぶ。floatingLayer が存在する場合は最上位に追加して合成する。
     func recomposite() {
-        compositeBounds = Compositor.unionBounds(layers: layers, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
-        gpuCompositor?.composite(layers: layers, bounds: compositeBounds)
+        var allLayers = layers
+        if let fl = floatingLayer { allLayers.insert(fl, at: 0) }
+        compositeBounds = Compositor.unionBounds(layers: allLayers, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
+        gpuCompositor?.composite(layers: allLayers, bounds: compositeBounds)
     }
 
     /// キャンバス座標の合成済みピクセル色（ルーペ・スポイト用、GPU から1ピクセル読み出し）
@@ -327,6 +348,8 @@ final class AppModel: ObservableObject {
         selection = snap.selection
         activeLayerID = snap.activeLayerID
         pendingTransform = SelectionTransform()
+        floatingLayer = nil
+        pixelMovePreview = nil
         coalesceKey = nil
         recomposite()
     }
@@ -374,23 +397,23 @@ final class AppModel: ObservableObject {
     /// 戻り値：イベントを消費したか
     @discardableResult
     func handleArrow(dx: Int, dy: Int, shift: Bool) -> Bool {
-        let targetSelection = (tool.isSelectionTool && selection != nil)
-            || (tool == .maskBrush && selection != nil)
-            || (toolTargetMode == .selection && selection != nil)
+        // 選択変形ツール・選択系ツール・マスクブラシ → 選択マスクを操作
+        let targetSelectionMask =
+            (tool == .selectionTransform && selection != nil) ||
+            (tool.isSelectionTool && selection != nil) ||
+            (tool == .maskBrush && selection != nil)
 
-        if targetSelection {
+        if targetSelectionMask {
             guard let sel = selection, let b = sel.bounds() else { return false }
             if shift {
-                // 範囲のサイズ変更：→拡大/←縮小（幅）、↓拡大/↑縮小（高さ）
-                let dw = Double(dx), dh = Double(dy)
-                let newW = max(1, b.width + CGFloat(dw))
-                let newH = max(1, b.height + CGFloat(dh))
+                let newW = max(1, b.width + CGFloat(dx))
+                let newH = max(1, b.height + CGFloat(dy))
                 pushUndo("選択範囲のサイズ変更", coalesceKey: "sel-resize")
                 selection = sel.transformed(
                     dx: 0, dy: 0,
                     scaleX: Double(newW / b.width), scaleY: Double(newH / b.height),
                     rotationDegrees: 0,
-                    center: CGPoint(x: b.minX, y: b.minY)  // 左上アンカー
+                    center: CGPoint(x: b.minX, y: b.minY)
                 )
             } else {
                 pushUndo("選択範囲の移動", coalesceKey: "sel-move")
@@ -399,7 +422,15 @@ final class AppModel: ObservableObject {
             return true
         }
 
-        // レイヤーモード
+        // 移動ツール + 選択あり → 選択内ピクセルを 1px 移動（破壊的）
+        if tool == .move, selection != nil, !shift {
+            guard activeLayer != nil else { return false }
+            pushUndo("ピクセルを移動", coalesceKey: "pixel-move")
+            applyPixelMoveImmediate(dx: dx, dy: dy)
+            return true
+        }
+
+        // レイヤー操作
         guard activeLayer != nil else { return false }
         if shift {
             guard let layer = activeLayer else { return false }
@@ -452,9 +483,18 @@ extension AppModel {
         var bounds: CGRect
     }
 
-    /// 変形ツールのハンドル位置（ビュー座標）。選択がなければ nil。
+    /// 変形ツールのハンドル位置（ビュー座標）。
+    /// transform ツールは selection == nil のときアクティブレイヤーの frame を使う。
     func transformHandles() -> TransformHandles? {
-        guard let b = selectionBaseBounds else { return nil }
+        let b: CGRect
+        if let selBounds = selectionBaseBounds {
+            b = selBounds
+        } else if (tool == .transform || tool == .selectionTransform), let layer = activeLayer {
+            b = CGRect(x: CGFloat(layer.offsetX), y: CGFloat(layer.offsetY),
+                       width: CGFloat(layer.buffer.width), height: CGFloat(layer.buffer.height))
+        } else {
+            return nil
+        }
         let t = pendingTransform
         let center = CGPoint(x: b.midX, y: b.midY)
         let affine = t.affine(center: center).concatenating(canvasToViewAffine)

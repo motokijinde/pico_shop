@@ -260,6 +260,7 @@ extension AppModel {
     }
 
     func invertSelection() {
+        applySelectionTransform()
         guard let sel = selection else {
             warn("選択範囲がありません")
             return
@@ -275,6 +276,7 @@ extension AppModel {
     }
 
     func growSelection(by px: Int) {
+        applySelectionTransform()
         guard let sel = selection else {
             warn("選択範囲がありません")
             return
@@ -284,6 +286,7 @@ extension AppModel {
     }
 
     func shrinkSelection(by px: Int) {
+        applySelectionTransform()
         guard let sel = selection else {
             warn("選択範囲がありません")
             return
@@ -294,8 +297,14 @@ extension AppModel {
 
     // MARK: 選択範囲の変形
 
-    /// 保留中の変形を適用してマスクを再ラスタライズ
+    /// 保留中の変形を適用してマスクを再ラスタライズ。
+    /// selectionTransform ツールで selection == nil のときはレイヤー全体を選択してから変形する。
     func applySelectionTransform() {
+        if selection == nil, tool == .selectionTransform, let layer = activeLayer {
+            selection = .rect(width: canvasWidth, height: canvasHeight,
+                              rect: CGRect(x: layer.offsetX, y: layer.offsetY,
+                                           width: layer.buffer.width, height: layer.buffer.height))
+        }
         guard let sel = selection, let b = sel.bounds(), !pendingTransform.isIdentity else { return }
         pushUndo("選択範囲の変形")
         selection = sel.transformed(
@@ -315,13 +324,15 @@ extension AppModel {
         pendingTransform = SelectionTransform()
     }
 
-    // MARK: カット（選択範囲を透明化）
+    // MARK: カット
 
     func cutSelection() {
+        applySelectionTransform()
         guard let sel = selection else {
             warn("選択範囲がありません")
             return
         }
+        copySelectionToPasteboard()
         pushUndo("カット")
         let ok = withActiveLayer { l in
             for y in 0..<l.buffer.height {
@@ -337,8 +348,6 @@ extension AppModel {
             l.refreshCache()
         }
         if ok {
-            selection = nil  // 仕様：カット後、選択状態は解除される
-            pendingTransform = SelectionTransform()
             recomposite()
         } else {
             discardLastUndo()  // ロック等で失敗した場合は履歴を戻す
@@ -349,6 +358,7 @@ extension AppModel {
 
     /// 選択範囲内を塗りつぶし
     func fillSelection() {
+        applySelectionTransform()
         guard let sel = selection else {
             warn("選択範囲がありません")
             return
@@ -393,18 +403,14 @@ extension AppModel {
         if ok { recomposite() } else { discardLastUndo() }
     }
 
-    // MARK: リサイズ / 回転 / 反転（レイヤー・選択モード対応）
+    // MARK: リサイズ / 回転 / 反転（selection != nil で選択範囲に適用、nil でレイヤー全体）
 
     func resizeActiveLayer(width: Int, height: Int) {
         guard width > 0, height > 0 else {
             warn("サイズが不正です")
             return
         }
-        if toolTargetMode == .selection {
-            guard let sel = selection, let b = sel.bounds() else {
-                warn("選択範囲がありません")
-                return
-            }
+        if let sel = selection, let b = sel.bounds() {
             pushUndo("選択範囲のリサイズ")
             selection = sel.transformed(
                 dx: 0, dy: 0,
@@ -422,11 +428,7 @@ extension AppModel {
     }
 
     func rotate(byDegrees deg: Double) {
-        if toolTargetMode == .selection {
-            guard let sel = selection, let b = sel.bounds() else {
-                warn("選択範囲がありません")
-                return
-            }
+        if let sel = selection, let b = sel.bounds() {
             pushUndo("選択範囲の回転")
             selection = sel.transformed(dx: 0, dy: 0, scaleX: 1, scaleY: 1,
                                         rotationDegrees: deg,
@@ -446,11 +448,7 @@ extension AppModel {
     }
 
     func flip(horizontal: Bool) {
-        if toolTargetMode == .selection {
-            guard let sel = selection, let b = sel.bounds() else {
-                warn("選択範囲がありません")
-                return
-            }
+        if let sel = selection, let b = sel.bounds() {
             pushUndo(horizontal ? "選択範囲の水平反転" : "選択範囲の垂直反転")
             selection = sel.transformed(dx: 0, dy: 0,
                                         scaleX: horizontal ? -1 : 1, scaleY: horizontal ? 1 : -1,
@@ -464,6 +462,246 @@ extension AppModel {
             l.refreshCache()
         }
         if ok { recomposite() } else { discardLastUndo() }
+    }
+
+    // MARK: ピクセル移動（move ツール + selection != nil）
+
+    /// ドラッグ開始時：選択内ピクセルをフローティングレイヤーに切り出す
+    func beginPixelMove() -> Bool {
+        guard let sel = selection, let idx = activeLayerIndex else { return false }
+        guard !layers[idx].locked else {
+            warn("レイヤーがロックされています")
+            NSSound.beep()
+            return false
+        }
+        let layer = layers[idx]
+        pushUndo("ピクセルを移動")・
+
+        var floatBuf = PixelBuffer(width: layer.buffer.width, height: layer.buffer.height)
+        for y in 0..<layer.buffer.height {
+            for x in 0..<layer.buffer.width {
+                let cx = x + layer.offsetX, cy = y + layer.offsetY
+                let v = Int(sel.value(x: cx, y: cy))
+                guard v > 0 else { continue }
+                let base = (y * layer.buffer.width + x) * 4
+                floatBuf.pixels[base]     = layer.buffer.pixels[base]
+                floatBuf.pixels[base + 1] = layer.buffer.pixels[base + 1]
+                floatBuf.pixels[base + 2] = layer.buffer.pixels[base + 2]
+                floatBuf.pixels[base + 3] = UInt8(Int(layer.buffer.pixels[base + 3]) * v / 255)
+                layers[idx].buffer.pixels[base + 3] = 0
+            }
+        }
+        layers[idx].refreshCache()
+
+        floatingLayer = Layer(name: "_floating", buffer: floatBuf,
+                              offsetX: layer.offsetX, offsetY: layer.offsetY)
+        pixelMovePreview = PixelMovePreview(
+            initialLayerOffsetX: layer.offsetX,
+            initialLayerOffsetY: layer.offsetY
+        )
+        recomposite()
+        return true
+    }
+
+    /// ドラッグ中：フローティングレイヤーのオフセットを更新
+    func updatePixelMoveOffset(dx: Int, dy: Int) {
+        guard let preview = pixelMovePreview else { return }
+        floatingLayer?.offsetX = preview.initialLayerOffsetX + dx
+        floatingLayer?.offsetY = preview.initialLayerOffsetY + dy
+        recomposite()
+    }
+
+    /// ドラッグ終了：フローティングレイヤーをアクティブレイヤーに合成して確定
+    func commitPixelMove() {
+        guard let fl = floatingLayer, let idx = activeLayerIndex else {
+            floatingLayer = nil
+            pixelMovePreview = nil
+            return
+        }
+        let layer = layers[idx]
+        for y in 0..<fl.buffer.height {
+            for x in 0..<fl.buffer.width {
+                guard fl.buffer.pixels[(y * fl.buffer.width + x) * 4 + 3] > 0 else { continue }
+                let cx = x + fl.offsetX, cy = y + fl.offsetY
+                let lx = cx - layer.offsetX, ly = cy - layer.offsetY
+                guard lx >= 0, lx < layer.buffer.width,
+                      ly >= 0, ly < layer.buffer.height else { continue }
+                let src = (y * fl.buffer.width + x) * 4
+                let dst = (ly * layer.buffer.width + lx) * 4
+                layers[idx].buffer.pixels[dst]     = fl.buffer.pixels[src]
+                layers[idx].buffer.pixels[dst + 1] = fl.buffer.pixels[src + 1]
+                layers[idx].buffer.pixels[dst + 2] = fl.buffer.pixels[src + 2]
+                layers[idx].buffer.pixels[dst + 3] = fl.buffer.pixels[src + 3]
+            }
+        }
+        layers[idx].refreshCache()
+
+        if let sel = selection, let preview = pixelMovePreview {
+            let dx = fl.offsetX - preview.initialLayerOffsetX
+            let dy = fl.offsetY - preview.initialLayerOffsetY
+            selection = sel.translated(dx: dx, dy: dy)
+        }
+        floatingLayer = nil
+        pixelMovePreview = nil
+        recomposite()
+    }
+
+    /// カーソルキー用：1px 単位の破壊的ピクセル移動
+    func applyPixelMoveImmediate(dx: Int, dy: Int) {
+        guard let sel = selection, let idx = activeLayerIndex else { return }
+        let layer = layers[idx]
+        var newBuf = layer.buffer  // 値コピー
+        // 選択ピクセルを元バッファ上でクリア
+        for y in 0..<layer.buffer.height {
+            for x in 0..<layer.buffer.width {
+                let cx = x + layer.offsetX, cy = y + layer.offsetY
+                guard sel.value(x: cx, y: cy) > 0 else { continue }
+                newBuf.pixels[(y * layer.buffer.width + x) * 4 + 3] = 0
+            }
+        }
+        // 元バッファから読んで新バッファの新位置に書く
+        for y in 0..<layer.buffer.height {
+            for x in 0..<layer.buffer.width {
+                let cx = x + layer.offsetX, cy = y + layer.offsetY
+                guard sel.value(x: cx, y: cy) > 0 else { continue }
+                let nlx = cx + dx - layer.offsetX
+                let nly = cy + dy - layer.offsetY
+                guard nlx >= 0, nlx < layer.buffer.width,
+                      nly >= 0, nly < layer.buffer.height else { continue }
+                let src = (y * layer.buffer.width + x) * 4
+                let dst = (nly * layer.buffer.width + nlx) * 4
+                newBuf.pixels[dst]     = layer.buffer.pixels[src]
+                newBuf.pixels[dst + 1] = layer.buffer.pixels[src + 1]
+                newBuf.pixels[dst + 2] = layer.buffer.pixels[src + 2]
+                newBuf.pixels[dst + 3] = layer.buffer.pixels[src + 3]
+            }
+        }
+        layers[idx].buffer = newBuf
+        layers[idx].refreshCache()
+        selection = sel.translated(dx: dx, dy: dy)
+        recomposite()
+    }
+
+    // MARK: ピクセル変形（transform ツール）
+
+    /// pendingTransform を選択内ピクセルまたはレイヤー全体に適用
+    func applyPixelTransform() {
+        guard !pendingTransform.isIdentity else { return }
+        guard let idx = activeLayerIndex else { return }
+        guard !layers[idx].locked else {
+            warn("レイヤーがロックされています")
+            NSSound.beep()
+            return
+        }
+
+        if let sel = selection, let b = sel.bounds() {
+            // 選択内ピクセルを変形
+            let sw = max(1, Int(b.width)), sh = max(1, Int(b.height))
+            let layer = layers[idx]
+            var srcBuf = PixelBuffer(width: sw, height: sh)
+
+            // 選択ピクセルを抽出
+            for y in 0..<sh {
+                for x in 0..<sw {
+                    let cx = Int(b.minX) + x, cy = Int(b.minY) + y
+                    guard sel.isSelected(x: cx, y: cy) else { continue }
+                    let lx = cx - layer.offsetX, ly = cy - layer.offsetY
+                    guard lx >= 0, lx < layer.buffer.width,
+                          ly >= 0, ly < layer.buffer.height else { continue }
+                    let src = (ly * layer.buffer.width + lx) * 4
+                    let dst = (y * sw + x) * 4
+                    srcBuf.pixels[dst]     = layer.buffer.pixels[src]
+                    srcBuf.pixels[dst + 1] = layer.buffer.pixels[src + 1]
+                    srcBuf.pixels[dst + 2] = layer.buffer.pixels[src + 2]
+                    srcBuf.pixels[dst + 3] = layer.buffer.pixels[src + 3]
+                }
+            }
+
+            pushUndo("変形")
+            let ok = withActiveLayer { l in
+                // 選択ピクセルをクリア
+                for y in 0..<sh {
+                    for x in 0..<sw {
+                        let cx = Int(b.minX) + x, cy = Int(b.minY) + y
+                        guard sel.isSelected(x: cx, y: cy) else { continue }
+                        let lx = cx - l.offsetX, ly = cy - l.offsetY
+                        guard lx >= 0, lx < l.buffer.width, ly >= 0, ly < l.buffer.height else { continue }
+                        l.buffer.pixels[(ly * l.buffer.width + lx) * 4 + 3] = 0
+                    }
+                }
+
+                // 回転適用
+                let q = resizeOpts.quality
+                var transformedBuf = srcBuf
+                if pendingTransform.rotation != 0 {
+                    let (rotated, _, _) = srcBuf.rotated(byDegrees: pendingTransform.rotation, quality: q)
+                    transformedBuf = rotated
+                }
+
+                // スケール適用
+                if abs(pendingTransform.scaleX - 1) > 0.001 || abs(pendingTransform.scaleY - 1) > 0.001 {
+                    let nw = max(1, Int((Double(transformedBuf.width) * abs(pendingTransform.scaleX)).rounded()))
+                    let nh = max(1, Int((Double(transformedBuf.height) * abs(pendingTransform.scaleY)).rounded()))
+                    transformedBuf = transformedBuf.resized(width: nw, height: nh, quality: q)
+                }
+
+                // 変形後ピクセルを中心座標（+ 移動オフセット）に貼り付け
+                let destCX = b.midX + CGFloat(pendingTransform.dx)
+                let destCY = b.midY + CGFloat(pendingTransform.dy)
+                let destLX = Int(destCX - CGFloat(transformedBuf.width) / 2) - l.offsetX
+                let destLY = Int(destCY - CGFloat(transformedBuf.height) / 2) - l.offsetY
+                for y in 0..<transformedBuf.height {
+                    for x in 0..<transformedBuf.width {
+                        let lx = destLX + x, ly = destLY + y
+                        guard lx >= 0, lx < l.buffer.width, ly >= 0, ly < l.buffer.height else { continue }
+                        let src = (y * transformedBuf.width + x) * 4
+                        guard transformedBuf.pixels[src + 3] > 0 else { continue }
+                        let dst = (ly * l.buffer.width + lx) * 4
+                        l.buffer.pixels[dst]     = transformedBuf.pixels[src]
+                        l.buffer.pixels[dst + 1] = transformedBuf.pixels[src + 1]
+                        l.buffer.pixels[dst + 2] = transformedBuf.pixels[src + 2]
+                        l.buffer.pixels[dst + 3] = transformedBuf.pixels[src + 3]
+                    }
+                }
+                l.refreshCache()
+            }
+            if ok {
+                selection = nil
+                pendingTransform = SelectionTransform()
+                recomposite()
+            } else {
+                discardLastUndo()
+            }
+
+        } else {
+            // レイヤー全体を変形
+            pushUndo("変形")
+            let q = resizeOpts.quality
+
+            if pendingTransform.rotation != 0 {
+                let (rotated, rdx, rdy) = layers[idx].buffer.rotated(byDegrees: pendingTransform.rotation, quality: q)
+                layers[idx].buffer = rotated
+                layers[idx].offsetX += rdx
+                layers[idx].offsetY += rdy
+                layers[idx].refreshCache()
+            }
+
+            if abs(pendingTransform.scaleX - 1) > 0.001 || abs(pendingTransform.scaleY - 1) > 0.001 {
+                let buf = layers[idx].buffer
+                let nw = max(1, Int((Double(buf.width) * abs(pendingTransform.scaleX)).rounded()))
+                let nh = max(1, Int((Double(buf.height) * abs(pendingTransform.scaleY)).rounded()))
+                layers[idx].buffer = buf.resized(width: nw, height: nh, quality: q)
+                layers[idx].refreshCache()
+            }
+
+            if pendingTransform.dx != 0 || pendingTransform.dy != 0 {
+                layers[idx].offsetX += Int(pendingTransform.dx.rounded())
+                layers[idx].offsetY += Int(pendingTransform.dy.rounded())
+            }
+
+            pendingTransform = SelectionTransform()
+            recomposite()
+        }
     }
 
     // MARK: クロップ
@@ -584,6 +822,7 @@ extension AppModel {
     // MARK: クリップボード
 
     func copySelectionToPasteboard() {
+        applySelectionTransform()
         guard let layer = activeLayer else { return }
         var buf: PixelBuffer
         if let sel = selection, let b = sel.bounds() {

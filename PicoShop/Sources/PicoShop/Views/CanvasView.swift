@@ -13,6 +13,7 @@ struct CanvasView: View {
         case brush
         case moveLayer(baseX: Int, baseY: Int, start: CGPoint)
         case moveSelection(base: SelectionMask, start: CGPoint)
+        case movePixels(start: CGPoint)
         case crop(start: CGPoint)
         case transformMove(t0: SelectionTransform, p0: CGPoint)
         case transformScale(t0: SelectionTransform, p0: CGPoint, anchorBase: CGPoint,
@@ -122,40 +123,89 @@ struct CanvasView: View {
             lastBrushPoint = nil
             return .brush
 
+        case .selectionTransform:
+            if let h = model.transformHandles() {
+                let t0 = model.pendingTransform
+                let center = CGPoint(x: h.bounds.midX, y: h.bounds.midY)
+                var action: DragAction? = nil
+                if distance(viewPoint, h.center) < 8 {
+                    action = .transformRotate(t0: t0, p0: canvasPoint,
+                                              center: CGPoint(x: center.x + t0.dx, y: center.y + t0.dy))
+                } else {
+                    for (i, p) in h.corners.enumerated() where distance(viewPoint, p) < 8 {
+                        let anchor = h.cornersBase[(i + 2) % 4]
+                        action = .transformScale(t0: t0, p0: canvasPoint, anchorBase: anchor,
+                                                 center: center, axisX: true, axisY: true)
+                        break
+                    }
+                    if action == nil {
+                        for (i, p) in h.edges.enumerated() where distance(viewPoint, p) < 8 {
+                            let anchor = h.edgesBase[(i + 2) % 4]
+                            let isVertical = (i == 0 || i == 2)
+                            action = .transformScale(t0: t0, p0: canvasPoint, anchorBase: anchor,
+                                                     center: center, axisX: !isVertical, axisY: isVertical)
+                            break
+                        }
+                    }
+                    if action == nil, isInsideTransformedSelection(canvasPoint) {
+                        action = .transformMove(t0: t0, p0: canvasPoint)
+                    }
+                }
+                if action != nil { model.isDraggingTransform = true }
+                return action ?? .ignore
+            }
+            return .ignore
+
         case .transform:
             if let h = model.transformHandles() {
                 let t0 = model.pendingTransform
                 let center = CGPoint(x: h.bounds.midX, y: h.bounds.midY)
+                var action: DragAction? = nil
                 if distance(viewPoint, h.center) < 8 {
-                    return .transformRotate(t0: t0, p0: canvasPoint,
-                                            center: CGPoint(x: center.x + t0.dx, y: center.y + t0.dy))
+                    action = .transformRotate(t0: t0, p0: canvasPoint,
+                                              center: CGPoint(x: center.x + t0.dx, y: center.y + t0.dy))
+                } else {
+                    for (i, p) in h.corners.enumerated() where distance(viewPoint, p) < 8 {
+                        let anchor = h.cornersBase[(i + 2) % 4]
+                        action = .transformScale(t0: t0, p0: canvasPoint, anchorBase: anchor,
+                                                 center: center, axisX: true, axisY: true)
+                        break
+                    }
+                    if action == nil {
+                        for (i, p) in h.edges.enumerated() where distance(viewPoint, p) < 8 {
+                            let anchor = h.edgesBase[(i + 2) % 4]
+                            let isVertical = (i == 0 || i == 2)
+                            action = .transformScale(t0: t0, p0: canvasPoint, anchorBase: anchor,
+                                                     center: center, axisX: !isVertical, axisY: isVertical)
+                            break
+                        }
+                    }
+                    if action == nil, isInsideTransformedSelection(canvasPoint) {
+                        action = .transformMove(t0: t0, p0: canvasPoint)
+                    }
                 }
-                for (i, p) in h.corners.enumerated() where distance(viewPoint, p) < 8 {
-                    let anchor = h.cornersBase[(i + 2) % 4]
-                    return .transformScale(t0: t0, p0: canvasPoint, anchorBase: anchor,
-                                           center: center, axisX: true, axisY: true)
-                }
-                for (i, p) in h.edges.enumerated() where distance(viewPoint, p) < 8 {
-                    let anchor = h.edgesBase[(i + 2) % 4]
-                    let isVertical = (i == 0 || i == 2)
-                    return .transformScale(t0: t0, p0: canvasPoint, anchorBase: anchor,
-                                           center: center, axisX: !isVertical, axisY: isVertical)
-                }
-                if isInsideTransformedSelection(canvasPoint) {
-                    return .transformMove(t0: t0, p0: canvasPoint)
-                }
+                if action != nil { model.isDraggingTransform = true }
+                return action ?? .ignore
             }
             return .ignore
 
         case .move:
-            if model.toolTargetMode == .selection {
-                guard let sel = model.selection else {
-                    model.warn("選択範囲がありません")
-                    return .ignore
+            if model.selection != nil {
+                if model.beginPixelMove() {
+                    return .movePixels(start: canvasPoint)
                 }
-                model.pushUndo("選択範囲の移動", coalesceKey: nil)
-                return .moveSelection(base: sel, start: canvasPoint)
+                return .ignore
             }
+            guard let layer = model.activeLayer else { return .ignore }
+            if layer.locked {
+                model.warn("レイヤーがロックされています")
+                NSSound.beep()
+                return .ignore
+            }
+            model.pushUndo("レイヤーの移動", coalesceKey: nil)
+            return .moveLayer(baseX: layer.offsetX, baseY: layer.offsetY, start: canvasPoint)
+
+        case .layerMove:
             guard let layer = model.activeLayer else { return .ignore }
             if layer.locked {
                 model.warn("レイヤーがロックされています")
@@ -226,13 +276,20 @@ struct CanvasView: View {
             let dy = Int((canvasP.y - start.y).rounded())
             model.selection = base.translated(dx: dx, dy: dy)
 
+        case .movePixels(let start):
+            let dx = Int((canvasP.x - start.x).rounded())
+            let dy = Int((canvasP.y - start.y).rounded())
+            model.updatePixelMoveOffset(dx: dx, dy: dy)
+
         case .crop(let start):
             previewRect = normalizedRect(from: start, to: canvasP)
             model.cropRect = previewRect
 
         case .transformMove(let t0, let p0):
-            model.pendingTransform.dx = t0.dx + Double(canvasP.x - p0.x)
-            model.pendingTransform.dy = t0.dy + Double(canvasP.y - p0.y)
+            var t = t0
+            t.dx = t0.dx + Double(canvasP.x - p0.x)
+            t.dy = t0.dy + Double(canvasP.y - p0.y)
+            model.dragPreviewTransform = t
 
         case .transformScale(let t0, let p0, let anchorBase, let center, let axisX, let axisY):
             let rot = -t0.rotation * .pi / 180
@@ -254,10 +311,16 @@ struct CanvasView: View {
             }
             sx = sx.clampedMagnitude(min: 0.01)
             sy = sy.clampedMagnitude(min: 0.01)
-            model.pendingTransform.scaleX = sx
-            model.pendingTransform.scaleY = sy
-            model.pendingTransform.dx = t0.dx + Double(anchorBase.x - center.x) * (t0.scaleX - sx)
-            model.pendingTransform.dy = t0.dy + Double(anchorBase.y - center.y) * (t0.scaleY - sy)
+            // アンカー固定：ローカルの補正ベクトルを回転行列でワールド座標に変換
+            let rad = t0.rotation * .pi / 180
+            let localDx = Double(anchorBase.x - center.x) * (t0.scaleX - sx)
+            let localDy = Double(anchorBase.y - center.y) * (t0.scaleY - sy)
+            var t = t0
+            t.scaleX = sx
+            t.scaleY = sy
+            t.dx = t0.dx + localDx * cos(rad) - localDy * sin(rad)
+            t.dy = t0.dy + localDx * sin(rad) + localDy * cos(rad)
+            model.dragPreviewTransform = t
 
         case .transformRotate(let t0, let p0, let center):
             let a0 = atan2(p0.y - center.y, p0.x - center.x)
@@ -265,7 +328,9 @@ struct CanvasView: View {
             var deg = t0.rotation + Double(a1 - a0) * 180 / .pi
             deg = deg.truncatingRemainder(dividingBy: 360)
             if deg < 0 { deg += 360 }
-            model.pendingTransform.rotation = deg
+            var t = t0
+            t.rotation = deg
+            model.dragPreviewTransform = t
 
         case .ignore:
             break
@@ -294,6 +359,16 @@ struct CanvasView: View {
             }
         case .pan(_):
             break
+        case .movePixels(_):
+            model.commitPixelMove()
+        case .transformMove, .transformScale, .transformRotate:
+            // プレビューを確定（@Published 更新はここで1回だけ）
+            if let preview = model.dragPreviewTransform {
+                model.pendingTransform = preview
+            }
+            model.dragPreviewTransform = nil
+            model.isDraggingTransform = false
+            // selectionTransform は即時適用しない。ツール切り替え時に確定する。
         case .ignore, nil:
             guard isClick else { break }
             handleClick(at: canvasP)
@@ -352,11 +427,16 @@ struct CanvasView: View {
     // MARK: - ヒットテスト・ユーティリティ
 
     private func isInsideTransformedSelection(_ canvasP: CGPoint) -> Bool {
-        guard let sel = model.selection, let b = model.selectionBaseBounds else { return false }
+        guard let b = model.transformHandles()?.bounds else { return false }
         let t = model.pendingTransform
         let inverse = t.affine(center: CGPoint(x: b.midX, y: b.midY)).inverted()
         let q = canvasP.applying(inverse)
-        return sel.isSelected(x: Int(q.x.rounded(.down)), y: Int(q.y.rounded(.down)))
+        if let sel = model.selection {
+            return sel.isSelected(x: Int(q.x.rounded(.down)), y: Int(q.y.rounded(.down)))
+        } else {
+            // selection == nil かつ transform ツール → レイヤー bounds で判定
+            return b.contains(q)
+        }
     }
 
     private func updateCursor() {
@@ -375,9 +455,9 @@ struct CanvasView: View {
             NSCursor.crosshair.set()
         case .maskBrush:
             NSCursor.crosshair.set()
-        case .transform:
+        case .selectionTransform, .transform:
             updateTransformCursor()
-        case .move:
+        case .move, .layerMove:
             NSCursor.openHand.set()
         case .eyedropper, .fill:
             NSCursor.crosshair.set()
@@ -387,21 +467,25 @@ struct CanvasView: View {
     }
 
     private func updateTransformCursor() {
+        if case .transformMove = dragAction {
+            NSCursor.closedHand.set()
+            return
+        }
         guard let vp = model.mouseCanvasPos.map({ model.canvasToView($0) }) else {
             NSCursor.arrow.set()
             return
         }
         if let h = model.transformHandles() {
             if distance(vp, h.center) < 8 {
-                NSCursor.crosshair.set()
+                Self.rotateCursor.set()
                 return
             }
             for p in h.corners where distance(vp, p) < 8 {
-                NSCursor.crosshair.set()
+                resizeCursor(from: h.center, to: p).set()
                 return
             }
             for p in h.edges where distance(vp, p) < 8 {
-                NSCursor.resizeUpDown.set()
+                resizeCursor(from: h.center, to: p).set()
                 return
             }
             if let cp = model.mouseCanvasPos, isInsideTransformedSelection(cp) {
@@ -419,6 +503,19 @@ struct CanvasView: View {
 
     private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
         hypot(a.x - b.x, a.y - b.y)
+    }
+
+    /// center → handle の方向角から、回転後も正しいリサイズカーソルを返す
+    private func resizeCursor(from center: CGPoint, to handle: CGPoint) -> NSCursor {
+        let angleDeg = atan2(Double(handle.y - center.y), Double(handle.x - center.x)) * 180 / .pi
+        let normalized = (angleDeg + 360).truncatingRemainder(dividingBy: 360)
+        let sector = Int((normalized / 45).rounded()) % 8
+        switch sector % 4 {
+        case 1: return Self.resizeNWSECursor
+        case 2: return NSCursor.resizeUpDown
+        case 3: return Self.resizeNESWCursor
+        default: return NSCursor.resizeLeftRight
+        }
     }
 
     private func rotate(_ p: CGPoint, around c: CGPoint, by rad: Double) -> CGPoint {
@@ -460,12 +557,15 @@ private extension Double {
     }
 }
 
-// MARK: - カスタムカーソル（選択操作モードバッジ付き）
+// MARK: - カスタムカーソル
 
 private extension CanvasView {
     static let selectionBaseCursor:     NSCursor = makeSelectionCursor()
     static let selectionAddCursor:      NSCursor = makeSelectionCursor(badge: "+")
     static let selectionSubtractCursor: NSCursor = makeSelectionCursor(badge: "−")
+    static let rotateCursor:            NSCursor = makeRotateCursor()
+    static let resizeNWSECursor:        NSCursor = makeDiagonalCursor(nwse: true)
+    static let resizeNESWCursor:        NSCursor = makeDiagonalCursor(nwse: false)
 
     static func makeSelectionCursor(badge: String? = nil) -> NSCursor {
         let size: CGFloat = 20
@@ -508,6 +608,86 @@ private extension CanvasView {
             return true
         }
         img.isTemplate = false
+        return NSCursor(image: img, hotSpot: NSPoint(x: size / 2, y: size / 2))
+    }
+
+    /// 回転カーソル：円弧 + 先端に矢印
+    static func makeRotateCursor() -> NSCursor {
+        let size: CGFloat = 20
+        let img = NSImage(size: NSSize(width: size, height: size), flipped: true) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            let cx = size / 2, cy = size / 2, r: CGFloat = 6.5
+            // y-down 座標: 0°=右, 90°=下, 180°=左, 270°=上
+            // 20°→340° の CW 円弧（ほぼ一周）
+            let startDeg: CGFloat = 20, endDeg: CGFloat = 340
+            func buildArc() {
+                let steps = 24
+                for i in 0...steps {
+                    let deg = startDeg + (endDeg - startDeg) * CGFloat(i) / CGFloat(steps)
+                    let rad = deg * .pi / 180
+                    let p = CGPoint(x: cx + r * cos(rad), y: cy + r * sin(rad))
+                    i == 0 ? ctx.move(to: p) : ctx.addLine(to: p)
+                }
+            }
+            ctx.setLineCap(.round); ctx.setLineJoin(.round)
+            ctx.setStrokeColor(NSColor.white.cgColor); ctx.setLineWidth(2.5)
+            buildArc(); ctx.strokePath()
+            ctx.setStrokeColor(NSColor.black.cgColor); ctx.setLineWidth(1.5)
+            buildArc(); ctx.strokePath()
+
+            // 340° の位置に矢印（CW の接線方向 = 340° + 90° = 70°）
+            let endRad = endDeg * .pi / 180
+            let tip = CGPoint(x: cx + r * cos(endRad), y: cy + r * sin(endRad))
+            let tangent = endRad + .pi / 2
+            for (sz, col) in [(CGFloat(4.5), NSColor.white), (3.5, NSColor.black)] {
+                ctx.setFillColor(col.cgColor)
+                ctx.move(to: tip)
+                ctx.addLine(to: CGPoint(x: tip.x + sz * cos(tangent + 0.5),
+                                        y: tip.y + sz * sin(tangent + 0.5)))
+                ctx.addLine(to: CGPoint(x: tip.x + sz * cos(tangent - 0.5),
+                                        y: tip.y + sz * sin(tangent - 0.5)))
+                ctx.closePath(); ctx.fillPath()
+            }
+            return true
+        }
+        return NSCursor(image: img, hotSpot: NSPoint(x: size / 2, y: size / 2))
+    }
+
+    /// 斜めリサイズカーソル（nwse: ↖↘ / !nwse: ↗↙）
+    static func makeDiagonalCursor(nwse: Bool) -> NSCursor {
+        let size: CGFloat = 20
+        let img = NSImage(size: NSSize(width: size, height: size), flipped: true) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            let m: CGFloat = 3
+            // flipped:true (y-down): (m,m)=左上, (size-m,size-m)=右下
+            let (p1, p2): (CGPoint, CGPoint) = nwse
+                ? (CGPoint(x: m, y: m), CGPoint(x: size - m, y: size - m))
+                : (CGPoint(x: size - m, y: m), CGPoint(x: m, y: size - m))
+            let dir = atan2(p2.y - p1.y, p2.x - p1.x)
+
+            func drawLine(lw: CGFloat, col: CGColor) {
+                ctx.setLineWidth(lw); ctx.setLineCap(.round)
+                ctx.setStrokeColor(col)
+                ctx.move(to: p1); ctx.addLine(to: p2); ctx.strokePath()
+            }
+            func drawHead(at tip: CGPoint, toward: CGFloat, sz: CGFloat, col: CGColor) {
+                ctx.setFillColor(col)
+                ctx.move(to: tip)
+                ctx.addLine(to: CGPoint(x: tip.x + sz * cos(toward + .pi + 0.45),
+                                        y: tip.y + sz * sin(toward + .pi + 0.45)))
+                ctx.addLine(to: CGPoint(x: tip.x + sz * cos(toward + .pi - 0.45),
+                                        y: tip.y + sz * sin(toward + .pi - 0.45)))
+                ctx.closePath(); ctx.fillPath()
+            }
+
+            drawLine(lw: 2.5, col: NSColor.white.cgColor)
+            drawHead(at: p1, toward: dir + .pi, sz: 4.5, col: NSColor.white.cgColor)
+            drawHead(at: p2, toward: dir,       sz: 4.5, col: NSColor.white.cgColor)
+            drawLine(lw: 1.5, col: NSColor.black.cgColor)
+            drawHead(at: p1, toward: dir + .pi, sz: 3.5, col: NSColor.black.cgColor)
+            drawHead(at: p2, toward: dir,       sz: 3.5, col: NSColor.black.cgColor)
+            return true
+        }
         return NSCursor(image: img, hotSpot: NSPoint(x: size / 2, y: size / 2))
     }
 }
