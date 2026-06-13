@@ -211,4 +211,14 @@ fragment float4 blend_fragment(QuadVaryings in [[stage_in]],
     float ao = as_ + ab * (1.0 - as_);
     return float4(co, ao);
 }
+
+// B&Wマスクプレビュー（色域選択ツール用）
+// 白 = 選択済み、黒 = 未選択
+fragment float4 bw_mask_fragment(QuadVaryings in [[stage_in]],
+                                  texture2d<float> mask [[texture(0)]],
+                                  sampler smp [[sampler(0)]]) {
+    float m = mask.sample(smp, in.uv).r;
+    float bw = m > 0.5 ? 1.0 : 0.0;
+    return float4(bw, bw, bw, 1.0);
+}
 """

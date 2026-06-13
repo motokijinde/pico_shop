@@ -109,43 +109,49 @@ struct FreehandSelectOptionsView: View {
     }
 }
 
-// MARK: - 色域選択（仕様 7-2）
+// MARK: - 色域選択
 
 struct ColorRangeSelectOptionsView: View {
     @EnvironmentObject var model: AppModel
-    @State private var debounceTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SelectionModeButtons()
 
             OptionSection(title: "色域選択") {
-                HStack {
-                    ColorPicker("背景色", selection: $model.colorRangeOpts.bgColor.swiftUIColor,
-                                supportsOpacity: false)
-                        .font(.caption)
-                    Spacer()
-                    Button("自動検出") { model.autoDetectBackgroundColor() }
-                        .controlSize(.small)
-                }
-                Text("R: \(model.colorRangeOpts.bgColor.r)  G: \(model.colorRangeOpts.bgColor.g)  B: \(model.colorRangeOpts.bgColor.b)")
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                sliderRow(label: "Level",
+                          value: $model.colorRangeOpts.level,
+                          range: 1...100)
+                sliderRow(label: "境界調整",
+                          value: $model.colorRangeOpts.boundaryAdjust,
+                          range: -10...10,
+                          hint: "← 縮小   拡大 →")
 
-                sliderRow(label: "Level",   value: $model.colorRangeOpts.level,   range: 1...100)
-                sliderRow(label: "Erosion", value: $model.colorRangeOpts.erosion,  range: 0...10)
-
-                Toggle("内側も選択", isOn: $model.colorRangeOpts.inside)
+                Toggle("隣接のみ", isOn: $model.colorRangeOpts.contiguous)
                     .font(.caption)
                     .controlSize(.small)
 
                 HStack(spacing: 6) {
-                    if model.colorRangeBusy { ProgressView().controlSize(.small) }
-                    if let info = model.colorRangeInfo {
-                        Text(info)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
+                    Button("Reset") {
+                        model.colorRangeOpts.level = 30
+                        model.colorRangeOpts.boundaryAdjust = 0
+                    }
+                    .controlSize(.small)
+
+                    Button("再実行") { model.retryColorRangeSelection() }
+                        .controlSize(.small)
+                        .disabled(model.colorRangeLastPoint == nil)
+
+                    Spacer()
+
+                    if model.colorRangePreviewOn {
+                        Button("プレビュー中") { model.colorRangePreviewOn.toggle() }
+                            .controlSize(.small)
+                            .buttonStyle(.borderedProminent)
+                    } else {
+                        Button("B&Wプレビュー") { model.colorRangePreviewOn.toggle() }
+                            .controlSize(.small)
+                            .buttonStyle(.bordered)
                     }
                 }
 
@@ -154,30 +160,27 @@ struct ColorRangeSelectOptionsView: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .onChange(of: model.colorRangeOpts.level)   { scheduleRun() }
-        .onChange(of: model.colorRangeOpts.erosion)  { scheduleRun() }
-        .onChange(of: model.colorRangeOpts.inside)   { scheduleRun() }
     }
 
-    private func scheduleRun() {
-        debounceTask?.cancel()
-        debounceTask = Task {
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled else { return }
-            model.runColorRangeSelection()
-        }
-    }
-
-    private func sliderRow(label: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
-        HStack(spacing: 4) {
-            Text(label)
-                .font(.caption2)
-                .frame(width: 44, alignment: .leading)
-            Slider(value: value, in: range)
-                .controlSize(.mini)
-            Text("\(Int(value.wrappedValue))")
-                .font(.caption2.monospacedDigit())
-                .frame(width: 24, alignment: .trailing)
+    private func sliderRow(label: String, value: Binding<Double>,
+                           range: ClosedRange<Double>, hint: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+                Text(label)
+                    .font(.caption2)
+                    .frame(width: 44, alignment: .leading)
+                Slider(value: value, in: range)
+                    .controlSize(.mini)
+                Text("\(Int(value.wrappedValue))")
+                    .font(.caption2.monospacedDigit())
+                    .frame(width: 28, alignment: .trailing)
+            }
+            if let hint {
+                Text(hint)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 48)
+            }
         }
     }
 }

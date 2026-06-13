@@ -57,6 +57,10 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
     private var overlay: OverlayRenderer?
     private var cancellables: Set<AnyCancellable> = []
 
+    /// B&Wマスクプレビュー用テクスチャ（選択範囲が変わったときだけ再構築）
+    private var maskTexture: MTLTexture?
+    private var maskTextureVersion: UInt64 = .max
+
     /// マーチングアンツ用キャッシュ（選択範囲が変わったときだけ再構築）
     private var antsMesh: StrokeMesh?
     private var antsMeshVersion: UInt64 = .max
@@ -165,6 +169,29 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
 
     private func encodeComposite(_ enc: MTLRenderCommandEncoder, model: AppModel, viewSize: CGSize) {
         guard let engine, let texture = model.gpuCompositor?.compositeTexture else { return }
+
+        // B&Wマスクプレビューモード（色域選択ツール）
+        if model.colorRangePreviewOn {
+            updateMaskTexture(model: model, engine: engine)
+            let cw = model.canvasWidth, ch = model.canvasHeight
+            guard cw > 0, ch > 0 else { return }
+            let topLeft = model.canvasToView(.zero)
+            let rect = CGRect(x: topLeft.x, y: topLeft.y,
+                              width: CGFloat(cw) * model.zoom, height: CGFloat(ch) * model.zoom)
+            var verts = MetalEngine.quadVertices(rect: rect, uvRect: CGRect(x: 0, y: 0, width: 1, height: 1))
+            var viewU = ViewUniforms(viewSize: [Float(viewSize.width), Float(viewSize.height)])
+            let maskTex = maskTexture ?? engine.blackR8Texture
+            enc.setRenderPipelineState(engine.bwMaskPipeline)
+            enc.setVertexBytes(&verts, length: MemoryLayout<QuadVertexIn>.stride * verts.count, index: 0)
+            enc.setVertexBytes(&viewU, length: MemoryLayout<ViewUniforms>.stride, index: 1)
+            enc.setFragmentTexture(maskTex, index: 0)
+            enc.setFragmentSamplerState(model.zoom >= 1 ? engine.nearestClampSampler
+                                                        : engine.linearMipSampler, index: 0)
+            enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: verts.count)
+            return
+        }
+
+        // 通常モード
         let b = model.compositeBounds
         let topLeft = model.canvasToView(CGPoint(x: b.minX, y: b.minY))
         let rect = CGRect(x: topLeft.x, y: topLeft.y,
@@ -177,10 +204,30 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
         enc.setVertexBytes(&viewU, length: MemoryLayout<ViewUniforms>.stride, index: 1)
         enc.setFragmentBytes(&alpha, length: MemoryLayout<Float>.stride, index: 0)
         enc.setFragmentTexture(texture, index: 0)
-        // 拡大はドット感維持で nearest、縮小は mipmap 補間
         enc.setFragmentSamplerState(model.zoom >= 1 ? engine.nearestClampSampler
                                                     : engine.linearMipSampler, index: 0)
         enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: verts.count)
+    }
+
+    private func updateMaskTexture(model: AppModel, engine: MetalEngine) {
+        guard maskTextureVersion != model.selectionVersion else { return }
+        maskTextureVersion = model.selectionVersion
+
+        guard let sel = model.selection else {
+            maskTexture = nil
+            return
+        }
+        let w = max(1, sel.width), h = max(1, sel.height)
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .r8Unorm, width: w, height: h, mipmapped: false)
+        desc.usage = .shaderRead
+        desc.storageMode = engine.device.hasUnifiedMemory ? .shared : .managed
+        guard let tex = engine.device.makeTexture(descriptor: desc) else { return }
+        sel.data.withUnsafeBytes { ptr in
+            tex.replace(region: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0,
+                        withBytes: ptr.baseAddress!, bytesPerRow: w)
+        }
+        maskTexture = tex
     }
 
     // MARK: オーバーレイ（CanvasView の drawOverlays / drawMarchingAnts / drawRulers の移植）

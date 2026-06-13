@@ -40,6 +40,9 @@ final class LoupeRenderer: NSObject, MTKViewDelegate {
     private var overlay: OverlayRenderer?
     private var cancellables: Set<AnyCancellable> = []
 
+    private var antsMesh: StrokeMesh?
+    private var antsMeshVersion: UInt64 = .max
+
     func attach(model: AppModel, view: MTKView) {
         self.model = model
         self.view = view
@@ -73,9 +76,18 @@ final class LoupeRenderer: NSObject, MTKViewDelegate {
         )
     }
 
+    private func syncAnimationMode(view: MTKView, model: AppModel) {
+        let wantsContinuous = model.loupeShowSelection && model.selection != nil
+        if wantsContinuous == view.isPaused {
+            view.isPaused = !wantsContinuous
+            view.enableSetNeedsDisplay = !wantsContinuous
+        }
+    }
+
     private func drawOnMain(in view: MTKView) {
         guard let model, let engine, let overlay,
               view.bounds.width > 0, view.bounds.height > 0 else { return }
+        syncAnimationMode(view: view, model: model)
         guard let rpd = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
               let cmd = engine.queue.makeCommandBuffer() else { return }
@@ -139,13 +151,10 @@ final class LoupeRenderer: NSObject, MTKViewDelegate {
         var s = OverlayScene()
 
         // ピクセルグリッド（200% 以上かつグリッド表示ON）
-        // factor を整数に丸めることで線がサブピクセル位置に落ちず縞々にならない
-        if factor >= 2 {
+        if factor >= 2 && model.loupeShowGrid {
             let g = max(2, factor.rounded())
             var gx: CGFloat = fmod(viewSize.width / 2 + g / 2, g)
             while gx < viewSize.width {
-                // 白→黒を同位置に重ねて描くと α合成により結果が [69,115] に収束し
-                // 背景が黒・白どちらでも必ず視認できる中間トーンになる
                 s.stroke([CGPoint(x: gx, y: 0), CGPoint(x: gx, y: viewSize.height)],
                          width: 1, color: NSColor.white.withAlphaComponent(0.55))
                 s.stroke([CGPoint(x: gx, y: 0), CGPoint(x: gx, y: viewSize.height)],
@@ -162,6 +171,29 @@ final class LoupeRenderer: NSObject, MTKViewDelegate {
             }
         }
 
+        // 選択境界（マーチングアンツ）
+        if model.loupeShowSelection, model.selection != nil, let path = model.selectionPath {
+            if antsMeshVersion != model.selectionVersion {
+                antsMesh = engine.flatMap {
+                    StrokeMesh(device: $0.device,
+                               polylines: Self.polylines(from: path),
+                               closed: false)
+                }
+                antsMeshVersion = model.selectionVersion
+            }
+            if let mesh = antsMesh {
+                let tx = -factor * cursor.x + viewSize.width / 2
+                let ty = -factor * cursor.y + viewSize.height / 2
+                let affine = CGAffineTransform(a: factor, b: 0, c: 0, d: factor, tx: tx, ty: ty)
+                let transform = OverlayScene.Transform2D(affine: affine)
+                let phase = CGFloat(CACurrentMediaTime() * 20).truncatingRemainder(dividingBy: 10)
+                s.items.append(.strokeCached(mesh: mesh, width: 1, color: .white,
+                                             dash: .init(on: 5, off: 5, phase: phase), transform: transform))
+                s.items.append(.strokeCached(mesh: mesh, width: 1, color: .black,
+                                             dash: .init(on: 5, off: 5, phase: phase + 5), transform: transform))
+            }
+        }
+
         // 中央の十字マーカー
         let cx = viewSize.width / 2, cy = viewSize.height / 2
         s.stroke([CGPoint(x: cx - 10, y: cy), CGPoint(x: cx + 10, y: cy)], width: 1.5, color: .red)
@@ -170,5 +202,30 @@ final class LoupeRenderer: NSObject, MTKViewDelegate {
                         width: 1.5, color: .red)
 
         return s
+    }
+
+    private static func polylines(from path: Path) -> [[CGPoint]] {
+        var lines: [[CGPoint]] = []
+        var current: [CGPoint] = []
+        func flush() {
+            if current.count >= 2 { lines.append(current) }
+            current = []
+        }
+        path.forEach { element in
+            switch element {
+            case .move(let to):
+                flush()
+                current = [to]
+            case .line(let to):
+                current.append(to)
+            case .quadCurve(let to, _), .curve(let to, _, _):
+                current.append(to)
+            case .closeSubpath:
+                if let first = current.first { current.append(first) }
+                flush()
+            }
+        }
+        flush()
+        return lines
     }
 }

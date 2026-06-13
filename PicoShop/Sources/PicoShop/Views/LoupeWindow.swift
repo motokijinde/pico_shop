@@ -118,6 +118,8 @@ private struct LoupeCanvasView: View {
         LoupeMetalView()
             .overlay(alignment: .top) {
                 HStack(spacing: 4) {
+                    LoupeToggleButton(systemImage: "rectangle.dashed", help: "選択境界", isOn: $model.loupeShowSelection)
+                    LoupeToggleButton(systemImage: "square.grid.3x3", help: "グリッド", isOn: $model.loupeShowGrid)
                     Spacer()
                     Picker("", selection: $model.loupeZoom) {
                         Text("1×").tag(100)
@@ -132,6 +134,34 @@ private struct LoupeCanvasView: View {
                 .padding(4)
             }
             .background(Color.black)
+    }
+}
+
+// MARK: - ルーペトグルボタン（アイコン・固定サイズ・ホバーエフェクト）
+
+private struct LoupeToggleButton: View {
+    let systemImage: String
+    let help: String
+    @Binding var isOn: Bool
+    @State private var isHovering = false
+
+    var body: some View {
+        Button { isOn.toggle() } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 24, height: 24)
+                .background(buttonBg, in: RoundedRectangle(cornerRadius: 4))
+                .foregroundStyle(isOn ? Color.black : Color.white)
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .onHover { isHovering = $0 }
+    }
+
+    private var buttonBg: Color {
+        if isOn        { return Color.white.opacity(0.9) }
+        if isHovering  { return Color.white.opacity(0.3) }
+        return Color.black.opacity(0.45)
     }
 }
 

@@ -31,8 +31,12 @@ final class MetalEngine {
     let quadPipeline: MTLRenderPipelineState
     let checkerPipeline: MTLRenderPipelineState
     let shapePipeline: MTLRenderPipelineState
+    /// B&Wマスクプレビュー用（色域選択ツール）
+    let bwMaskPipeline: MTLRenderPipelineState
     /// オフスクリーン合成用（ターゲット: rgba8Unorm、全ピクセル上書き）
     let blendPipeline: MTLRenderPipelineState
+    /// 1×1 r8Unorm value=0（B&Wプレビューで選択なし時の黒テクスチャ）
+    let blackR8Texture: MTLTexture
 
     let nearestClampSampler: MTLSamplerState
     let nearestBorderSampler: MTLSamplerState   // 範囲外 = 透明（ルーペ・レイヤー合成用）
@@ -66,6 +70,19 @@ final class MetalEngine {
         blendPipeline = try Self.makePipeline(device: device, library: lib,
                                               vertex: "quad_vertex", fragment: "blend_fragment",
                                               format: Self.compositePixelFormat, blending: false)
+        bwMaskPipeline = try Self.makePipeline(device: device, library: lib,
+                                               vertex: "quad_vertex", fragment: "bw_mask_fragment",
+                                               format: Self.viewPixelFormat, blending: true)
+
+        let r8Desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .r8Unorm, width: 1, height: 1, mipmapped: false)
+        r8Desc.usage = .shaderRead
+        r8Desc.storageMode = device.hasUnifiedMemory ? .shared : .managed
+        guard let r8Tex = device.makeTexture(descriptor: r8Desc) else { throw Error.noDevice }
+        var zeroR8: UInt8 = 0
+        r8Tex.replace(region: MTLRegionMake2D(0, 0, 1, 1), mipmapLevel: 0,
+                      withBytes: &zeroR8, bytesPerRow: 1)
+        blackR8Texture = r8Tex
 
         nearestClampSampler = Self.makeSampler(device: device, filter: .nearest,
                                                mip: .notMipmapped, address: .clampToEdge)

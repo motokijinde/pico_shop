@@ -388,7 +388,7 @@ extension AppModel {
         pushUndo("塗りつぶし")
         let region = ColorRangeEngine.floodFill(
             pixels: layer.buffer.pixels, width: layer.buffer.width, height: layer.buffer.height,
-            startX: lx, startY: ly, tolerance: Int(fillOpts.tolerance * 2.55)
+            startX: lx, startY: ly, tolerance: Int(fillOpts.tolerance * 2.55), contiguous: true
         )
         let c = fillOpts.color
         let ok = withActiveLayer { l in
@@ -475,7 +475,7 @@ extension AppModel {
             return false
         }
         let layer = layers[idx]
-        pushUndo("ピクセルを移動")・
+        pushUndo("ピクセルを移動")
 
         var floatBuf = PixelBuffer(width: layer.buffer.width, height: layer.buffer.height)
         for y in 0..<layer.buffer.height {
@@ -726,62 +726,55 @@ extension AppModel {
         fitToView()
     }
 
-    // MARK: 色域選択（バックグラウンド処理）
+    // MARK: 色域選択
 
-    func runColorRangeSelection() {
+    /// キャンバス座標 p のアクティブレイヤーピクセルを基準色としてflood fill選択を実行
+    func applyColorRangeSelection(atCanvas p: CGPoint) {
         guard let layer = activeLayer else {
             warn("レイヤーが選択されていません")
             return
         }
-        let pixels = layer.buffer.pixels
+        let lx = Int(p.x.rounded(.down)) - layer.offsetX
+        let ly = Int(p.y.rounded(.down)) - layer.offsetY
+        guard lx >= 0, lx < layer.buffer.width,
+              ly >= 0, ly < layer.buffer.height else { return }
+
         let w = layer.buffer.width, h = layer.buffer.height
         let ox = layer.offsetX, oy = layer.offsetY
         let cw = canvasWidth, ch = canvasHeight
-        let params = ColorRangeEngine.Params(
-            bgColor: (colorRangeOpts.bgColor.r, colorRangeOpts.bgColor.g, colorRangeOpts.bgColor.b),
-            level: Int(colorRangeOpts.level),
-            erosion: Int(colorRangeOpts.erosion),
-            inside: colorRangeOpts.inside
+        let opts = colorRangeOpts
+
+        var mask = ColorRangeEngine.floodFill(
+            pixels: layer.buffer.pixels, width: w, height: h,
+            startX: lx, startY: ly,
+            tolerance: Int(opts.level),
+            contiguous: opts.contiguous
         )
-        colorRangeBusy = true
-        Task.detached(priority: .userInitiated) {
-            do {
-                let (mask, info) = try ColorRangeEngine.select(pixels: pixels, width: w, height: h, params: params)
-                // レイヤー座標 → キャンバス座標
-                var canvasData = [UInt8](repeating: 0, count: cw * ch)
-                for y in 0..<h {
-                    let cy = y + oy
-                    guard cy >= 0, cy < ch else { continue }
-                    for x in 0..<w {
-                        let cx = x + ox
-                        guard cx >= 0, cx < cw else { continue }
-                        canvasData[cy * cw + cx] = mask[y * w + x]
-                    }
-                }
-                let result = SelectionMask(width: cw, height: ch, data: canvasData)
-                await MainActor.run { [result] in
-                    self.colorRangeBusy = false
-                    self.colorRangeInfo = "領域数: \(info.regionCount) / 選択: \(info.selectedPixels) px"
-                    self.applySelection(result, label: "色域選択")
-                }
-            } catch {
-                await MainActor.run {
-                    self.colorRangeBusy = false
-                    self.colorRangeInfo = error.localizedDescription
-                }
+
+        let adj = Int(opts.boundaryAdjust.rounded())
+        if adj != 0 {
+            ColorRangeEngine.adjustBoundary(mask: &mask, width: w, height: h, amount: -adj)
+        }
+
+        var canvasData = [UInt8](repeating: 0, count: cw * ch)
+        for y in 0..<h {
+            let cy = y + oy
+            guard cy >= 0, cy < ch else { continue }
+            for x in 0..<w {
+                let cx = x + ox
+                guard cx >= 0, cx < cw else { continue }
+                canvasData[cy * cw + cx] = mask[y * w + x]
             }
         }
+
+        let result = SelectionMask(width: cw, height: ch, data: canvasData)
+        colorRangeLastPoint = p
+        applySelection(result, label: "色域選択")
     }
 
-    /// 画像の四隅から背景色を自動検出して選択を実行
-    func autoDetectBackgroundColor() {
-        guard let layer = activeLayer else { return }
-        if let c = ColorRangeEngine.sampleBgColor(pixels: layer.buffer.pixels,
-                                                  width: layer.buffer.width,
-                                                  height: layer.buffer.height) {
-            colorRangeOpts.bgColor = PixelColor(r: c.r, g: c.g, b: c.b)
-            runColorRangeSelection()
-        }
+    func retryColorRangeSelection() {
+        guard let p = colorRangeLastPoint else { return }
+        applyColorRangeSelection(atCanvas: p)
     }
 
     // MARK: テキスト

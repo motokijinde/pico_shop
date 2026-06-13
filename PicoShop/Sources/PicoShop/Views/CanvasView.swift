@@ -380,10 +380,7 @@ struct CanvasView: View {
     private func handleClick(at canvasP: CGPoint) {
         switch model.tool {
         case .colorRangeSelect:
-            if let c = model.compositeColor(atCanvas: canvasP) {
-                model.colorRangeOpts.bgColor = PixelColor(r: c.r, g: c.g, b: c.b)
-                model.runColorRangeSelection()
-            }
+            model.applyColorRangeSelection(atCanvas: canvasP)
         case .fill:
             if model.fillOpts.scope == .selection {
                 model.fillSelection()
@@ -452,7 +449,11 @@ struct CanvasView: View {
             case .subtract: Self.selectionSubtractCursor.set()
             }
         case .colorRangeSelect:
-            NSCursor.crosshair.set()
+            switch model.selectionOperationMode {
+            case .replace:  Self.colorRangeBaseCursor.set()
+            case .add:      Self.colorRangeAddCursor.set()
+            case .subtract: Self.colorRangeSubtractCursor.set()
+            }
         case .maskBrush:
             NSCursor.crosshair.set()
         case .selectionTransform, .transform:
@@ -563,9 +564,59 @@ private extension CanvasView {
     static let selectionBaseCursor:     NSCursor = makeSelectionCursor()
     static let selectionAddCursor:      NSCursor = makeSelectionCursor(badge: "+")
     static let selectionSubtractCursor: NSCursor = makeSelectionCursor(badge: "−")
+    static let colorRangeBaseCursor:    NSCursor = makeWandCursor()
+    static let colorRangeAddCursor:     NSCursor = makeWandCursor(badge: "+")
+    static let colorRangeSubtractCursor:NSCursor = makeWandCursor(badge: "−")
     static let rotateCursor:            NSCursor = makeRotateCursor()
     static let resizeNWSECursor:        NSCursor = makeDiagonalCursor(nwse: true)
     static let resizeNESWCursor:        NSCursor = makeDiagonalCursor(nwse: false)
+
+    /// 魔法の杖カーソル（色域選択ツール用）
+    /// ホットスポット：杖の先端（スパークル中心）
+    static func makeWandCursor(badge: String? = nil) -> NSCursor {
+        let size: CGFloat = 20
+        let img = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            // y-up 座標系（flipped: false）
+            // スティック: (3, 3) → (12, 12)  スパークル中心: (15, 15)
+            ctx.setLineCap(.round); ctx.setLineJoin(.round)
+
+            func drawWand() {
+                // スティック
+                ctx.move(to: CGPoint(x: 3, y: 3))
+                ctx.addLine(to: CGPoint(x: 11, y: 11))
+                // スパークル（上下左右4本）
+                ctx.move(to: CGPoint(x: 15, y: 12)); ctx.addLine(to: CGPoint(x: 15, y: 18))
+                ctx.move(to: CGPoint(x: 12, y: 15)); ctx.addLine(to: CGPoint(x: 18, y: 15))
+                // スパークル（斜め2本）
+                ctx.move(to: CGPoint(x: 13, y: 17)); ctx.addLine(to: CGPoint(x: 17, y: 13))
+                ctx.move(to: CGPoint(x: 13, y: 13)); ctx.addLine(to: CGPoint(x: 17, y: 17))
+            }
+
+            ctx.setLineWidth(2.5)
+            ctx.setStrokeColor(NSColor.white.cgColor)
+            drawWand(); ctx.strokePath()
+
+            ctx.setLineWidth(1.5)
+            ctx.setStrokeColor(NSColor.black.cgColor)
+            drawWand(); ctx.strokePath()
+
+            if let badge {
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.boldSystemFont(ofSize: 8),
+                    .foregroundColor: NSColor.black,
+                    .strokeColor: NSColor.white,
+                    .strokeWidth: -2.5,
+                ]
+                NSAttributedString(string: badge, attributes: attrs)
+                    .draw(at: NSPoint(x: 1, y: 1))
+            }
+            return true
+        }
+        img.isTemplate = false
+        // ホットスポット: スパークル中心 (15, 15) y-up → 画面座標 (15, size-15) = (15, 5)
+        return NSCursor(image: img, hotSpot: NSPoint(x: 15, y: 5))
+    }
 
     static func makeSelectionCursor(badge: String? = nil) -> NSCursor {
         let size: CGFloat = 20

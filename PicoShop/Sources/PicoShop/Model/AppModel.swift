@@ -11,13 +11,12 @@ final class AppModel: ObservableObject {
     @Published var canvasHeight: Int = 768
     @Published var selection: SelectionMask? {
         didSet {
-            // bounds はメインスレッドで同期計算（StatusBar 等が毎フレーム呼ぶのを防ぐキャッシュ）
             selectionBounds = selection?.bounds()
             selectionPath = nil
             selectionVersion &+= 1
+            if selection == nil { colorRangePreviewOn = false }
             let ver = selectionVersion
             guard let sel = selection else { return }
-            // boundaryPath はメインスレッドをブロックしないようバックグラウンドで計算
             Task.detached(priority: .userInitiated) { [weak self] in
                 let path = sel.boundaryPath()
                 await MainActor.run { [weak self] in
@@ -30,7 +29,9 @@ final class AppModel: ObservableObject {
 
     /// 選択範囲の世代番号（Metal 側のアンツメッシュ再構築判定用）
     private(set) var selectionVersion: UInt64 = 0
-    @Published var activeLayerID: UUID?
+    @Published var activeLayerID: UUID? {
+        didSet { if activeLayerID != oldValue { colorRangeLastPoint = nil } }
+    }
 
     /// マーチングアンツ用の境界パス（selection 変更時に非同期で再計算されるキャッシュ）
     @Published private(set) var selectionPath: Path?
@@ -61,6 +62,7 @@ final class AppModel: ObservableObject {
     @Published var tool: Tool = .rectSelect {
         didSet {
             if tool != .crop { cropRect = nil }
+            if tool != .colorRangeSelect { colorRangePreviewOn = false }
             if oldValue == .selectionTransform && tool != .selectionTransform {
                 applySelectionTransform()
             }
@@ -121,9 +123,15 @@ final class AppModel: ObservableObject {
     /// クロップツールの保留矩形（キャンバス座標）
     @Published var cropRect: CGRect?
 
-    /// 色域選択：処理中フラグと結果情報
-    @Published var colorRangeBusy = false
-    @Published var colorRangeInfo: String?
+    /// 色域選択：B&Wマスクプレビューフラグ
+    @Published var colorRangePreviewOn = false
+    /// 色域選択：直前のクリック座標（再実行ボタン用）
+    @Published var colorRangeLastPoint: CGPoint?
+
+    /// ルーペ：選択境界表示フラグ
+    @Published var loupeShowSelection: Bool = true
+    /// ルーペ：グリッド表示フラグ
+    @Published var loupeShowGrid: Bool = true
 
     /// 選択範囲 拡大/縮小の最後に使った値（クイックメニュー用）
     @Published var lastGrowShrinkAmount: Int = 8
