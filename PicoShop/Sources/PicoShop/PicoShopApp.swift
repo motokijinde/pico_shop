@@ -76,6 +76,9 @@ struct PicoShopApp: App {
                     model.shrinkSelection(by: model.lastGrowShrinkAmount)
                 }
                 Button("選択範囲を変更...") { model.showModifySelectionDialog = true }
+                Divider()
+                Button("選択範囲でクロップ") { model.cropToSelection() }
+                    .disabled(model.selection == nil)
             }
 
             // MARK: レイヤー
@@ -89,6 +92,9 @@ struct PicoShopApp: App {
                 Divider()
                 Button("レイヤーを統合") { model.mergeVisibleLayers() }
                     .keyboardShortcut("e", modifiers: .command)
+                Divider()
+                Button("透明部分をトリム") { model.trimActiveLayer() }
+                    .disabled(model.activeLayer == nil)
             }
 
             // MARK: ウィンドウ

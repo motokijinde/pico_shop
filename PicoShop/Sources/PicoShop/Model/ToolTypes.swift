@@ -14,7 +14,6 @@ enum Tool: String, CaseIterable, Identifiable {
     case fill
     case resize
     case text
-    case crop
     case rotate
     case flip
     case eyedropper
@@ -34,7 +33,6 @@ enum Tool: String, CaseIterable, Identifiable {
         case .fill:               return "塗りつぶし"
         case .resize:             return "リサイズ"
         case .text:               return "テキスト"
-        case .crop:               return "クロップ"
         case .rotate:             return "回転"
         case .flip:               return "反転"
         case .eyedropper:         return "スポイト"
@@ -48,13 +46,12 @@ enum Tool: String, CaseIterable, Identifiable {
         case .colorRangeSelect:   return "wand.and.rays"
         case .maskBrush:          return "paintbrush.pointed"
         case .selectionTransform: return "selection.pin.in.out"
-        case .move:               return "arrow.up.and.down.and.arrow.left.and.right"
+        case .move:               return "cursorarrow.and.square.on.square.dashed"
         case .layerMove:          return "hand.draw"
         case .transform:          return "crop.rotate"
         case .fill:               return "paintbrush.fill"
         case .resize:             return "arrow.up.left.and.arrow.down.right"
         case .text:               return "textformat"
-        case .crop:               return "crop"
         case .rotate:             return "rotate.right"
         case .flip:               return "arrow.left.and.right.righttriangle.left.righttriangle.right"
         case .eyedropper:         return "eyedropper"

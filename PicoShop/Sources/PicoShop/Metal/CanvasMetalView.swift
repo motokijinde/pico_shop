@@ -132,6 +132,7 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
     private func syncAnimationMode(view: MTKView, model: AppModel) {
         let wantsContinuous = model.selection != nil
             || (model.tool == .selectionTransform && model.activeLayer != nil)
+            || (model.tool == .move && model.floatingLayer != nil)
             || model.isDraggingTransform
         if wantsContinuous == view.isPaused {
             view.isPaused = !wantsContinuous
@@ -260,13 +261,6 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
             s.strokeRect(vr, width: 1, color: .black, dash: .init(on: 5, off: 5, phase: phase + 5))
         }
 
-        // クロップ範囲
-        if model.tool == .crop, let r = model.cropRect {
-            let vr = r.applying(toView)
-            s.dimOutside(vr, in: viewSize, color: NSColor.black.withAlphaComponent(0.3))
-            s.strokeRect(vr, width: 1.5, color: .yellow, dash: .init(on: 6, off: 3))
-        }
-
         // フリーハンド選択の軌跡
         if lassoPoints.count >= 2 {
             s.stroke(lassoPoints.map { $0.applying(toView) }, width: 1, color: accent)
@@ -280,8 +274,8 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
                             width: 1, color: model.brushOpts.add ? .green : .red)
         }
 
-        // 変形ハンドル（変形ツール・選択変形ツール）
-        if (model.tool == .transform || model.tool == .selectionTransform),
+        // 変形ハンドル（変形ツール・選択変形ツール・移動ツール）
+        if (model.tool == .transform || model.tool == .selectionTransform || model.tool == .move),
            let h = model.transformHandles() {
             // バウンディングボックス破線（selection != nil のみ。== nil は buildMarchingAnts が担当）
             // .strokeCached で毎フレームのテッセレーションを回避する
@@ -362,6 +356,37 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
             return
         }
 
+        // move + selection == nil → originalMoveBounds の破線矩形
+        if model.tool == .move, model.selection == nil,
+           let bounds = model.originalMoveBounds, let eng = engine {
+            let key = "\(Int(bounds.minX)),\(Int(bounds.minY)),\(Int(bounds.width)),\(Int(bounds.height))"
+            if key != layerBoundsMeshKey {
+                let pts: [CGPoint] = [
+                    CGPoint(x: bounds.minX, y: bounds.minY), CGPoint(x: bounds.maxX, y: bounds.minY),
+                    CGPoint(x: bounds.maxX, y: bounds.maxY), CGPoint(x: bounds.minX, y: bounds.maxY),
+                    CGPoint(x: bounds.minX, y: bounds.minY)
+                ]
+                layerBoundsMesh = StrokeMesh(device: eng.device, polylines: [pts], closed: false)
+                layerBoundsMeshKey = key
+            }
+            if let mesh = layerBoundsMesh {
+                let activeTransform = model.dragPreviewTransform ?? model.pendingTransform
+                var affine = model.canvasToViewAffine
+                if !activeTransform.isIdentity {
+                    affine = activeTransform
+                        .affine(center: CGPoint(x: bounds.midX, y: bounds.midY))
+                        .concatenating(affine)
+                }
+                let transform = OverlayScene.Transform2D(affine: affine)
+                let phase = CGFloat(CACurrentMediaTime() * 20).truncatingRemainder(dividingBy: 10)
+                s.items.append(.strokeCached(mesh: mesh, width: 1, color: .white,
+                                             dash: .init(on: 5, off: 5, phase: phase), transform: transform))
+                s.items.append(.strokeCached(mesh: mesh, width: 1, color: .black,
+                                             dash: .init(on: 5, off: 5, phase: phase + 5), transform: transform))
+            }
+            return
+        }
+
         guard model.selection != nil, let path = model.selectionPath else { return }
 
         if antsMeshVersion != model.selectionVersion {
@@ -372,9 +397,9 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
         }
         guard let mesh = antsMesh else { return }
 
-        // pendingTransform のプレビューは変形ツール・選択変形ツールで適用（ドラッグ中は dragPreviewTransform を優先）
+        // pendingTransform のプレビューは変形ツール・選択変形ツール・移動ツールで適用（ドラッグ中は dragPreviewTransform を優先）
         var affine = model.canvasToViewAffine
-        if (model.tool == .transform || model.tool == .selectionTransform),
+        if (model.tool == .transform || model.tool == .selectionTransform || model.tool == .move),
            let b = model.selectionBaseBounds {
             let activeTransform = model.dragPreviewTransform ?? model.pendingTransform
             if !activeTransform.isIdentity {

@@ -17,13 +17,12 @@ struct OptionsPanel: View {
             case .colorRangeSelect:   ColorRangeSelectOptionsView()
             case .maskBrush:          MaskBrushOptionsView()
             case .selectionTransform: SelectionTransformOptionsView()
-            case .move:               MoveToolOptions()
+            case .move:               MoveTransformPanel()
             case .layerMove:          LayerMoveToolOptions()
             case .transform:          TransformToolOptionsView()
             case .fill:               FillToolOptions()
             case .resize:             ResizeToolOptions()
             case .text:               TextToolOptions()
-            case .crop:               CropToolOptions()
             case .rotate:             RotateToolOptions()
             case .flip:               FlipToolOptions()
             case .eyedropper:         EyedropperOptions()
@@ -316,20 +315,137 @@ struct SelectionTransformOptionsView: View {
 
 // MARK: - 移動ツール
 
-struct MoveToolOptions: View {
+struct MoveTransformPanel: View {
     @EnvironmentObject var model: AppModel
+    @State private var wText    = ""
+    @State private var hText    = ""
+    @State private var wPctText = ""
+    @State private var hPctText = ""
+    @State private var xText    = ""
+    @State private var yText    = ""
+    @State private var rotText  = ""
+
+    private var baseBounds: CGRect? { model.originalMoveBounds }
 
     var body: some View {
         OptionSection(title: "移動") {
-            Text(model.selection == nil
-                 ? "ドラッグまたはカーソルキーで\nアクティブレイヤーを移動します"
-                 : "ドラッグまたはカーソルキーで\n選択内ピクセルを移動します（破壊的）")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text("カーソルキー: 1px 移動")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            if let b = baseBounds {
+                Text("元サイズ: \(Int(b.width)) × \(Int(b.height)) px")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 6) {
+                    NumberField(label: "幅", text: $wText, width: 48) { commitSize() }
+                    NumberField(label: "高さ", text: $hText, width: 48) { commitSize() }
+                }
+                HStack(spacing: 6) {
+                    NumberField(label: "W%", text: $wPctText, width: 48) { commitPct(fromW: true) }
+                    NumberField(label: "H%", text: $hPctText, width: 48) { commitPct(fromW: false) }
+                }
+                HStack(spacing: 6) {
+                    NumberField(label: "X", text: $xText, width: 48) { commitPosition() }
+                    NumberField(label: "Y", text: $yText, width: 48) { commitPosition() }
+                }
+                NumberField(label: "回転(°)", text: $rotText, width: 48) {
+                    if var v = Double(rotText) {
+                        v = v.truncatingRemainder(dividingBy: 360)
+                        if v < 0 { v += 360 }
+                        model.pendingTransform.rotation = v
+                        model.extractMovePixels()
+                        model.rasterizePreview()
+                    }
+                }
+                Toggle("アスペクト比維持", isOn: $model.transformKeepAspect)
+                    .font(.caption)
+                    .controlSize(.small)
+
+                HStack(spacing: 4) {
+                    Button("確定") { model.commitMoveTransform() }
+                        .disabled(model.originalMoveBounds == nil)
+                    Button("リセット") { model.resetMoveTransform() }
+                        .disabled(model.pendingTransform.isIdentity)
+                }
+                .controlSize(.small)
+            } else {
+                Text("レイヤーがありません")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
+        .onAppear { sync() }
+        .onChange(of: model.pendingTransform) { sync() }
+        .onChange(of: model.originalMoveBounds) { sync() }
+    }
+
+    private func sync() {
+        guard let b = baseBounds else { return }
+        let t = model.pendingTransform
+        let w = Double(b.width)  * abs(t.scaleX)
+        let h = Double(b.height) * abs(t.scaleY)
+        let cx = b.midX + t.dx
+        let cy = b.midY + t.dy
+        wText    = String(Int(w.rounded()))
+        hText    = String(Int(h.rounded()))
+        wPctText = String(format: "%.1f", abs(t.scaleX) * 100)
+        hPctText = String(format: "%.1f", abs(t.scaleY) * 100)
+        xText    = String(Int((cx - w / 2).rounded()))
+        yText    = String(Int((cy - h / 2).rounded()))
+        rotText  = String(Int(t.rotation.rounded()))
+    }
+
+    private func commitSize() {
+        guard let b = baseBounds, b.width > 0, b.height > 0,
+              let w = Double(wText), let h = Double(hText), w >= 1, h >= 1 else { return }
+        let sx = w / Double(b.width)
+        var sy = h / Double(b.height)
+        if model.transformKeepAspect {
+            sy = sx
+            hText    = String(Int((Double(b.height) * sy).rounded()))
+            hPctText = String(format: "%.1f", sy * 100)
+        }
+        model.pendingTransform.scaleX = max(0.01, sx)
+        model.pendingTransform.scaleY = max(0.01, sy)
+        model.extractMovePixels()
+        model.rasterizePreview()
+    }
+
+    private func commitPct(fromW: Bool) {
+        guard let b = baseBounds, b.width > 0, b.height > 0 else { return }
+        if fromW {
+            guard let pct = Double(wPctText), pct >= 0.1 else { return }
+            let sx = pct / 100
+            model.pendingTransform.scaleX = max(0.01, sx)
+            wText = String(Int((Double(b.width) * sx).rounded()))
+            if model.transformKeepAspect {
+                model.pendingTransform.scaleY = max(0.01, sx)
+                hPctText = wPctText
+                hText = String(Int((Double(b.height) * sx).rounded()))
+            }
+        } else {
+            guard let pct = Double(hPctText), pct >= 0.1 else { return }
+            let sy = pct / 100
+            model.pendingTransform.scaleY = max(0.01, sy)
+            hText = String(Int((Double(b.height) * sy).rounded()))
+            if model.transformKeepAspect {
+                model.pendingTransform.scaleX = max(0.01, sy)
+                wPctText = hPctText
+                wText = String(Int((Double(b.width) * sy).rounded()))
+            }
+        }
+        model.extractMovePixels()
+        model.rasterizePreview()
+    }
+
+    private func commitPosition() {
+        guard let b = baseBounds,
+              let x = Double(xText), let y = Double(yText) else { return }
+        let t = model.pendingTransform
+        let w = Double(b.width)  * abs(t.scaleX)
+        let h = Double(b.height) * abs(t.scaleY)
+        model.pendingTransform.dx = x + w / 2 - Double(b.midX)
+        model.pendingTransform.dy = y + h / 2 - Double(b.midY)
+        model.extractMovePixels()
+        model.rasterizePreview()
     }
 }
 
@@ -672,50 +788,6 @@ struct TextToolOptions: View {
 }
 
 // MARK: - クロップツール（仕様 10-2）
-
-struct CropToolOptions: View {
-    @EnvironmentObject var model: AppModel
-    @State private var xText = ""
-    @State private var yText = ""
-    @State private var wText = ""
-    @State private var hText = ""
-
-    var body: some View {
-        OptionSection(title: "クロップ") {
-            Text("キャンバス上をドラッグして範囲を指定")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 6) {
-                NumberField(label: "X", text: $xText, width: 48) { commitRect() }
-                NumberField(label: "Y", text: $yText, width: 48) { commitRect() }
-            }
-            HStack(spacing: 6) {
-                NumberField(label: "幅", text: $wText, width: 48) { commitRect() }
-                NumberField(label: "高さ", text: $hText, width: 48) { commitRect() }
-            }
-            HStack(spacing: 4) {
-                Button("適用") { model.applyCrop() }
-                    .disabled(model.cropRect == nil)
-                Button("キャンセル") { model.cropRect = nil }
-            }
-            .controlSize(.small)
-        }
-        .onChange(of: model.cropRect) { sync() }
-        .onAppear { sync() }
-    }
-
-    private func sync() {
-        guard let r = model.cropRect else { return }
-        xText = String(Int(r.minX)); yText = String(Int(r.minY))
-        wText = String(Int(r.width)); hText = String(Int(r.height))
-    }
-
-    private func commitRect() {
-        guard let x = Double(xText), let y = Double(yText),
-              let w = Double(wText), let h = Double(hText), w >= 1, h >= 1 else { return }
-        model.cropRect = CGRect(x: x, y: y, width: w, height: h)
-    }
-}
 
 // MARK: - 回転ツール（仕様 10-3）
 

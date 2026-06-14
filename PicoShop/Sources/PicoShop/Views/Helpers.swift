@@ -30,6 +30,8 @@ struct NumberField: View {
                 Text(label)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .frame(width: labelWidth, alignment: .trailing)
             }
             HStack(spacing: 0) {

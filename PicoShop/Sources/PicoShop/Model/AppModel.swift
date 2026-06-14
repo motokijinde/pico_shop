@@ -61,16 +61,21 @@ final class AppModel: ObservableObject {
 
     @Published var tool: Tool = .rectSelect {
         didSet {
-            if tool != .crop { cropRect = nil }
             if tool != .colorRangeSelect { colorRangePreviewOn = false }
             if oldValue == .selectionTransform && tool != .selectionTransform {
                 applySelectionTransform()
+            }
+            if oldValue == .move && tool != .move {
+                commitMoveTransform()
+            }
+            if tool == .move {
+                beginMoveTransform()
             }
         }
     }
     @Published var selectionOperationMode: SelectionOperationMode = .replace
 
-    /// ピクセル移動プレビュー用フローティングレイヤー（move ツールのドラッグ中のみ有効）
+    /// move ツールのプレビュー用フローティングレイヤー（ツールアクティブ中は常に有効）
     @Published var floatingLayer: Layer?
 
     struct PixelMovePreview {
@@ -78,6 +83,16 @@ final class AppModel: ObservableObject {
         var initialLayerOffsetY: Int
     }
     var pixelMovePreview: PixelMovePreview?
+
+    /// move ツール起動時に抽出した元ピクセル（リセット・再ラスタライズの基準）
+    var originalMoveBuffer: PixelBuffer? = nil
+    /// move ツール起動時の対象領域（キャンバス座標）
+    @Published var originalMoveBounds: CGRect? = nil
+    /// バックグラウンドタスク（抽出・プレビュー・確定）の競合防止用バージョン番号
+    /// cleanup 時にインクリメントすることで飛行中タスクを一括キャンセルする
+    var rasterizeVersion: UInt64 = 0
+    /// ピクセル抽出バックグラウンドタスクの再入防止フラグ
+    var isMoveExtracting = false
 
     @Published var showLoupe = false
     @Published var showOptionsPanel = true
@@ -121,7 +136,6 @@ final class AppModel: ObservableObject {
     var selectionBaseBounds: CGRect? { selectionBounds }
 
     /// クロップツールの保留矩形（キャンバス座標）
-    @Published var cropRect: CGRect?
 
     /// 色域選択：B&Wマスクプレビューフラグ
     @Published var colorRangePreviewOn = false
@@ -358,8 +372,11 @@ final class AppModel: ObservableObject {
         pendingTransform = SelectionTransform()
         floatingLayer = nil
         pixelMovePreview = nil
+        originalMoveBuffer = nil
+        originalMoveBounds = nil
         coalesceKey = nil
         recomposite()
+        if tool == .move { beginMoveTransform() }
     }
 
     // MARK: - キーボード操作（カーソルキー 1px 調整）
@@ -430,11 +447,18 @@ final class AppModel: ObservableObject {
             return true
         }
 
-        // 移動ツール + 選択あり → 選択内ピクセルを 1px 移動（破壊的）
-        if tool == .move, selection != nil, !shift {
-            guard activeLayer != nil else { return false }
-            pushUndo("ピクセルを移動", coalesceKey: "pixel-move")
-            applyPixelMoveImmediate(dx: dx, dy: dy)
+        // move ツール：floatingLayer の位置を 1px 動かす
+        if tool == .move, originalMoveBounds != nil, !shift {
+            extractMovePixels()  // ドラッグ前に矢印キーが押された場合も抽出を開始する
+            pendingTransform.dx += Double(dx)
+            pendingTransform.dy += Double(dy)
+            if let buf = floatingLayer?.buffer, let bounds = originalMoveBounds {
+                let midX = bounds.midX + pendingTransform.dx
+                let midY = bounds.midY + pendingTransform.dy
+                floatingLayer?.offsetX = Int((midX - Double(buf.width)  / 2).rounded())
+                floatingLayer?.offsetY = Int((midY - Double(buf.height) / 2).rounded())
+            }
+            recomposite()
             return true
         }
 
@@ -497,6 +521,8 @@ extension AppModel {
         let b: CGRect
         if let selBounds = selectionBaseBounds {
             b = selBounds
+        } else if tool == .move, let mb = originalMoveBounds {
+            b = mb
         } else if (tool == .transform || tool == .selectionTransform), let layer = activeLayer {
             b = CGRect(x: CGFloat(layer.offsetX), y: CGFloat(layer.offsetY),
                        width: CGFloat(layer.buffer.width), height: CGFloat(layer.buffer.height))

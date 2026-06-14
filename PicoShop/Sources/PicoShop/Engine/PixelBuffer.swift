@@ -209,6 +209,23 @@ struct PixelBuffer {
     }
 
     /// 透明部分のトリム（非透明ピクセルの最小バウンディングボックス）
+    func cropped(srcX: Int, srcY: Int, width: Int, height: Int) -> PixelBuffer {
+        var result = PixelBuffer(width: width, height: height)
+        for ny in 0..<height {
+            for nx in 0..<width {
+                let ox = srcX + nx, oy = srcY + ny
+                guard ox >= 0, ox < self.width, oy >= 0, oy < self.height else { continue }
+                let si = (oy * self.width + ox) * 4
+                let di = (ny * width + nx) * 4
+                result.pixels[di]     = pixels[si]
+                result.pixels[di + 1] = pixels[si + 1]
+                result.pixels[di + 2] = pixels[si + 2]
+                result.pixels[di + 3] = pixels[si + 3]
+            }
+        }
+        return result
+    }
+
     func opaqueBounds() -> (x: Int, y: Int, w: Int, h: Int)? {
         var minX = width, maxX = -1, minY = height, maxY = -1
         for y in 0..<height {

@@ -582,6 +582,243 @@ extension AppModel {
         recomposite()
     }
 
+    // MARK: ピクセル移動変形（move ツール）
+
+    /// move ツール選択時：バウンズだけ記録してハンドルを表示（ロック中は何もしない）
+    func beginMoveTransform() {
+        guard floatingLayer == nil else { return }
+        guard let idx = activeLayerIndex else { return }
+        guard !layers[idx].locked else { return }
+        let layer = layers[idx]
+
+        if let sel = selection, let b = sel.bounds() {
+            originalMoveBounds = b
+        } else {
+            originalMoveBounds = CGRect(x: CGFloat(layer.offsetX), y: CGFloat(layer.offsetY),
+                                        width: CGFloat(layer.buffer.width),
+                                        height: CGFloat(layer.buffer.height))
+        }
+        pendingTransform = SelectionTransform()
+    }
+
+    /// ドラッグ開始時（遅延実行）：ピクセル抽出をバックグラウンドで行い floatingLayer をセット
+    func extractMovePixels() {
+        guard !isMoveExtracting, floatingLayer == nil,
+              let idx = activeLayerIndex, originalMoveBounds != nil else { return }
+
+        isMoveExtracting = true
+
+        // スナップショットをメインスレッドで取得（値コピーなので安全）
+        let snapshot  = layers[idx].buffer
+        let offsetX   = layers[idx].offsetX
+        let offsetY   = layers[idx].offsetY
+        let sel       = self.selection
+
+        rasterizeVersion &+= 1
+        let ver = rasterizeVersion
+
+        Task.detached(priority: .userInitiated) { [snapshot, offsetX, offsetY, sel, weak self] in
+            let floatBuf:   PixelBuffer
+            let clearedBuf: PixelBuffer
+            let floatOX:    Int
+            let floatOY:    Int
+
+            if let sel = sel, let b = sel.bounds() {
+                // 選択あり：選択ピクセルを抽出、元バッファから選択部分のアルファをクリア
+                let sw = max(1, Int(b.width)), sh = max(1, Int(b.height))
+                var extracted = PixelBuffer(width: sw, height: sh)
+                var cleared   = snapshot  // 値コピー（スレッドセーフ）
+                for y in 0..<sh {
+                    for x in 0..<sw {
+                        let cx = Int(b.minX) + x, cy = Int(b.minY) + y
+                        guard sel.isSelected(x: cx, y: cy) else { continue }
+                        let lx = cx - offsetX, ly = cy - offsetY
+                        guard lx >= 0, lx < snapshot.width,
+                              ly >= 0, ly < snapshot.height else { continue }
+                        let src = (ly * snapshot.width + lx) * 4
+                        let dst = (y * sw + x) * 4
+                        extracted.pixels[dst]     = snapshot.pixels[src]
+                        extracted.pixels[dst + 1] = snapshot.pixels[src + 1]
+                        extracted.pixels[dst + 2] = snapshot.pixels[src + 2]
+                        extracted.pixels[dst + 3] = snapshot.pixels[src + 3]
+                        cleared.pixels[src + 3]   = 0
+                    }
+                }
+                floatBuf   = extracted
+                clearedBuf = cleared
+                floatOX    = Int(b.minX.rounded())
+                floatOY    = Int(b.minY.rounded())
+            } else {
+                // 選択なし：スナップショットをそのまま使い、空バッファで元レイヤーをクリア
+                floatBuf   = snapshot
+                clearedBuf = PixelBuffer(width: snapshot.width, height: snapshot.height)
+                floatOX    = offsetX
+                floatOY    = offsetY
+            }
+
+            await MainActor.run { [weak self, floatBuf, clearedBuf, floatOX, floatOY] in
+                guard let self, self.rasterizeVersion == ver else {
+                    self?.isMoveExtracting = false
+                    return
+                }
+                self.isMoveExtracting = false
+                self.layers[idx].buffer = clearedBuf
+                self.layers[idx].refreshCache()
+                self.originalMoveBuffer = floatBuf
+                self.floatingLayer = Layer(name: "_floating", buffer: floatBuf,
+                                          offsetX: floatOX, offsetY: floatOY)
+                // 抽出中にドラッグ・矢印キー操作が走っていた場合は即再ラスタライズ
+                if !self.pendingTransform.isIdentity {
+                    self.rasterizePreview()
+                } else {
+                    self.recomposite()
+                }
+            }
+        }
+    }
+
+    /// ドラッグ終了・数値入力確定時：pendingTransform を originalMoveBuffer に適用して floatingLayer を更新
+    /// 回転・スケールはバックグラウンドスレッドで処理してメインスレッドをブロックしない。
+    func rasterizePreview() {
+        guard let orig = originalMoveBuffer, let bounds = originalMoveBounds else { return }
+        let t = pendingTransform
+        let midX = bounds.midX + t.dx
+        let midY = bounds.midY + t.dy
+
+        // 平行移動のみ：再ラスタライズ不要、offsetX/Y だけ更新
+        if t.rotation == 0 && abs(t.scaleX - 1) < 0.001 && abs(t.scaleY - 1) < 0.001 {
+            floatingLayer?.offsetX = Int((midX - Double(orig.width)  / 2).rounded())
+            floatingLayer?.offsetY = Int((midY - Double(orig.height) / 2).rounded())
+            recomposite()
+            return
+        }
+
+        // 回転・スケールはバックグラウンドで実行
+        let q = resizeOpts.quality
+        rasterizeVersion &+= 1
+        let ver = rasterizeVersion
+
+        Task.detached(priority: .userInitiated) { [orig, t, q, midX, midY, weak self] in
+            var buf = orig
+            if t.rotation != 0 {
+                let (rotated, _, _) = buf.rotated(byDegrees: t.rotation, quality: q)
+                buf = rotated
+            }
+            if abs(t.scaleX - 1) > 0.001 || abs(t.scaleY - 1) > 0.001 {
+                let nw = max(1, Int((Double(buf.width)  * abs(t.scaleX)).rounded()))
+                let nh = max(1, Int((Double(buf.height) * abs(t.scaleY)).rounded()))
+                buf = buf.resized(width: nw, height: nh, quality: q)
+            }
+            let newLayer = Layer(name: "_floating", buffer: buf,
+                                 offsetX: Int((midX - Double(buf.width)  / 2).rounded()),
+                                 offsetY: Int((midY - Double(buf.height) / 2).rounded()))
+            await MainActor.run { [weak self] in
+                guard let self, self.rasterizeVersion == ver else { return }
+                self.floatingLayer = newLayer
+                self.recomposite()
+            }
+        }
+    }
+
+    /// 確定：floatingLayer をキャンバスクリップしてアクティブレイヤーに書き込む
+    func commitMoveTransform() {
+        guard originalMoveBounds != nil else { return }
+        guard let fl = floatingLayer, let bounds = originalMoveBounds else {
+            cleanupMoveTransform()
+            beginMoveTransform()
+            return
+        }
+        guard let idx = activeLayerIndex else {
+            cleanupMoveTransform()
+            beginMoveTransform()
+            return
+        }
+        guard !layers[idx].locked else {
+            warn("レイヤーがロックされています")
+            NSSound.beep()
+            return
+        }
+
+        pushUndo("移動")
+
+        // バックグラウンドに渡す値をキャプチャしてから、すぐに状態をクリア（二重コミット防止）
+        let layerBuf    = layers[idx].buffer
+        let layerOX     = layers[idx].offsetX
+        let layerOY     = layers[idx].offsetY
+        let floatBuf    = fl.buffer
+        let floatOX     = fl.offsetX
+        let floatOY     = fl.offsetY
+        let cw = canvasWidth, ch = canvasHeight
+        let sel = selection
+        let t   = pendingTransform
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        cleanupMoveTransform()
+        // bounds は確定前にキャプチャ・検証済みのため、beginMoveTransform のガードをバイパスして直接復元
+        originalMoveBounds = bounds
+
+        Task.detached(priority: .userInitiated) { [layerBuf, floatBuf, weak self] in
+            // ピクセル書き込み（値コピーで操作）
+            var result = layerBuf
+            for y in 0..<floatBuf.height {
+                for x in 0..<floatBuf.width {
+                    guard floatBuf.pixels[(y * floatBuf.width + x) * 4 + 3] > 0 else { continue }
+                    let cx = x + floatOX, cy = y + floatOY
+                    guard cx >= 0, cx < cw, cy >= 0, cy < ch else { continue }
+                    let lx = cx - layerOX, ly = cy - layerOY
+                    guard lx >= 0, lx < layerBuf.width,
+                          ly >= 0, ly < layerBuf.height else { continue }
+                    let src = (y * floatBuf.width + x) * 4
+                    let dst = (ly * layerBuf.width + lx) * 4
+                    result.pixels[dst]     = floatBuf.pixels[src]
+                    result.pixels[dst + 1] = floatBuf.pixels[src + 1]
+                    result.pixels[dst + 2] = floatBuf.pixels[src + 2]
+                    result.pixels[dst + 3] = floatBuf.pixels[src + 3]
+                }
+            }
+
+            // 選択マスク変換（CoreGraphics なのでバックグラウンドでも OK）
+            let newSel: SelectionMask?
+            if let sel {
+                newSel = sel.transformed(dx: t.dx, dy: t.dy,
+                                         scaleX: t.scaleX, scaleY: t.scaleY,
+                                         rotationDegrees: t.rotation, center: center)
+            } else {
+                let base = SelectionMask.rect(width: cw, height: ch, rect: bounds)
+                newSel = base.transformed(dx: t.dx, dy: t.dy,
+                                          scaleX: t.scaleX, scaleY: t.scaleY,
+                                          rotationDegrees: t.rotation, center: center)
+            }
+
+            await MainActor.run { [weak self, result, newSel] in
+                guard let self else { return }
+                self.layers[idx].buffer = result
+                self.layers[idx].refreshCache()
+                self.selection = newSel
+                self.recomposite()
+                self.beginMoveTransform()  // 確定後も move ツールが継続できるよう即再初期化
+            }
+        }
+    }
+
+    /// リセット：originalMoveBuffer から floatingLayer を復元、pendingTransform をクリア
+    func resetMoveTransform() {
+        guard let orig = originalMoveBuffer, let bounds = originalMoveBounds else { return }
+        floatingLayer = Layer(name: "_floating", buffer: orig,
+                              offsetX: Int(bounds.minX.rounded()),
+                              offsetY: Int(bounds.minY.rounded()))
+        pendingTransform = SelectionTransform()
+        recomposite()
+    }
+
+    private func cleanupMoveTransform() {
+        rasterizeVersion &+= 1   // 飛行中の抽出・プレビュー・確定タスクを一括キャンセル
+        isMoveExtracting = false
+        floatingLayer = nil
+        originalMoveBuffer = nil
+        originalMoveBounds = nil
+        pendingTransform = SelectionTransform()
+    }
+
     // MARK: ピクセル変形（transform ツール）
 
     /// pendingTransform を選択内ピクセルまたはレイヤー全体に適用
@@ -706,22 +943,65 @@ extension AppModel {
 
     // MARK: クロップ
 
-    func applyCrop() {
-        guard let rect = cropRect, rect.width >= 1, rect.height >= 1 else {
-            warn("クロップ範囲がありません")
+    func cropToSelection() {
+        guard let sel = selection, let b = sel.bounds() else {
+            warn("選択範囲がありません")
             return
         }
-        pushUndo("クロップ")
-        let ox = Int(rect.minX.rounded()), oy = Int(rect.minY.rounded())
-        let w = Int(rect.width.rounded()), h = Int(rect.height.rounded())
+        let ox = Int(b.minX.rounded()), oy = Int(b.minY.rounded())
+        let w = max(1, Int(b.width.rounded())), h = max(1, Int(b.height.rounded()))
+
+        pushUndo("選択範囲でクロップ")
         for i in layers.indices {
-            layers[i].offsetX -= ox
-            layers[i].offsetY -= oy
+            let srcX = ox - layers[i].offsetX
+            let srcY = oy - layers[i].offsetY
+            layers[i].buffer  = layers[i].buffer.cropped(srcX: srcX, srcY: srcY, width: w, height: h)
+            layers[i].offsetX = 0
+            layers[i].offsetY = 0
+            layers[i].refreshCache()
         }
-        canvasWidth = max(1, w)
-        canvasHeight = max(1, h)
-        selection = nil
-        cropRect = nil
+        canvasWidth  = w
+        canvasHeight = h
+
+        // 選択範囲を新キャンバス座標にずらして残す
+        var newSel = SelectionMask(width: w, height: h)
+        for y in 0..<h {
+            for x in 0..<w {
+                newSel.data[y * w + x] = sel.value(x: ox + x, y: oy + y)
+            }
+        }
+        selection = newSel
+
+        recomposite()
+        fitToView()
+    }
+
+    func trimActiveLayer() {
+        guard let idx = activeLayerIndex,
+              let b = layers[idx].buffer.opaqueBounds() else {
+            warn("トリムできる不透明ピクセルがありません")
+            return
+        }
+        pushUndo("透明部分をトリム")
+        layers[idx].offsetX += b.x
+        layers[idx].offsetY += b.y
+        layers[idx].buffer   = layers[idx].buffer.cropped(srcX: b.x, srcY: b.y, width: b.w, height: b.h)
+        layers[idx].refreshCache()
+
+        // トリム後に全表示レイヤーの frame でキャンバスもリサイズ
+        let visible = layers.filter { $0.visible }
+        if !visible.isEmpty {
+            var bounds = visible[0].frame
+            for l in visible.dropFirst() { bounds = bounds.union(l.frame) }
+            let ox = Int(bounds.minX.rounded(.down)), oy = Int(bounds.minY.rounded(.down))
+            for i in layers.indices {
+                layers[i].offsetX -= ox
+                layers[i].offsetY -= oy
+            }
+            canvasWidth  = max(1, Int(bounds.width.rounded(.up)))
+            canvasHeight = max(1, Int(bounds.height.rounded(.up)))
+        }
+
         recomposite()
         fitToView()
     }

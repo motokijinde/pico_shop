@@ -14,7 +14,6 @@ struct CanvasView: View {
         case moveLayer(baseX: Int, baseY: Int, start: CGPoint)
         case moveSelection(base: SelectionMask, start: CGPoint)
         case movePixels(start: CGPoint)
-        case crop(start: CGPoint)
         case transformMove(t0: SelectionTransform, p0: CGPoint)
         case transformScale(t0: SelectionTransform, p0: CGPoint, anchorBase: CGPoint,
                             center: CGPoint, axisX: Bool, axisY: Bool)
@@ -190,20 +189,41 @@ struct CanvasView: View {
             return .ignore
 
         case .move:
-            if model.selection != nil {
-                if model.beginPixelMove() {
-                    return .movePixels(start: canvasPoint)
+            if let h = model.transformHandles() {
+                let t0 = model.pendingTransform
+                let center = CGPoint(x: h.bounds.midX, y: h.bounds.midY)
+                var action: DragAction? = nil
+                if distance(viewPoint, h.center) < 8 {
+                    action = .transformRotate(t0: t0, p0: canvasPoint,
+                                              center: CGPoint(x: center.x + t0.dx, y: center.y + t0.dy))
+                } else {
+                    for (i, p) in h.corners.enumerated() where distance(viewPoint, p) < 8 {
+                        let anchor = h.cornersBase[(i + 2) % 4]
+                        action = .transformScale(t0: t0, p0: canvasPoint, anchorBase: anchor,
+                                                 center: center, axisX: true, axisY: true)
+                        break
+                    }
+                    if action == nil {
+                        for (i, p) in h.edges.enumerated() where distance(viewPoint, p) < 8 {
+                            let anchor = h.edgesBase[(i + 2) % 4]
+                            let isVertical = (i == 0 || i == 2)
+                            action = .transformScale(t0: t0, p0: canvasPoint, anchorBase: anchor,
+                                                     center: center, axisX: !isVertical, axisY: isVertical)
+                            break
+                        }
+                    }
+                    if action == nil, isInsideTransformedSelection(canvasPoint) {
+                        action = .transformMove(t0: t0, p0: canvasPoint)
+                    }
                 }
-                return .ignore
+                if action != nil {
+                    // 初回操作時にバックグラウンドでピクセルを抽出（ノンブロッキング）
+                    model.extractMovePixels()
+                    model.isDraggingTransform = true
+                }
+                return action ?? .ignore
             }
-            guard let layer = model.activeLayer else { return .ignore }
-            if layer.locked {
-                model.warn("レイヤーがロックされています")
-                NSSound.beep()
-                return .ignore
-            }
-            model.pushUndo("レイヤーの移動", coalesceKey: nil)
-            return .moveLayer(baseX: layer.offsetX, baseY: layer.offsetY, start: canvasPoint)
+            return .ignore
 
         case .layerMove:
             guard let layer = model.activeLayer else { return .ignore }
@@ -214,9 +234,6 @@ struct CanvasView: View {
             }
             model.pushUndo("レイヤーの移動", coalesceKey: nil)
             return .moveLayer(baseX: layer.offsetX, baseY: layer.offsetY, start: canvasPoint)
-
-        case .crop:
-            return .crop(start: canvasPoint)
 
         case .fill, .eyedropper, .text, .resize, .rotate, .flip:
             return .ignore
@@ -280,10 +297,6 @@ struct CanvasView: View {
             let dx = Int((canvasP.x - start.x).rounded())
             let dy = Int((canvasP.y - start.y).rounded())
             model.updatePixelMoveOffset(dx: dx, dy: dy)
-
-        case .crop(let start):
-            previewRect = normalizedRect(from: start, to: canvasP)
-            model.cropRect = previewRect
 
         case .transformMove(let t0, let p0):
             var t = t0
@@ -368,7 +381,9 @@ struct CanvasView: View {
             }
             model.dragPreviewTransform = nil
             model.isDraggingTransform = false
-            // selectionTransform は即時適用しない。ツール切り替え時に確定する。
+            if model.tool == .move {
+                model.rasterizePreview()
+            }
         case .ignore, nil:
             guard isClick else { break }
             handleClick(at: canvasP)
@@ -456,9 +471,9 @@ struct CanvasView: View {
             }
         case .maskBrush:
             NSCursor.crosshair.set()
-        case .selectionTransform, .transform:
+        case .selectionTransform, .transform, .move:
             updateTransformCursor()
-        case .move, .layerMove:
+        case .layerMove:
             NSCursor.openHand.set()
         case .eyedropper, .fill:
             NSCursor.crosshair.set()
