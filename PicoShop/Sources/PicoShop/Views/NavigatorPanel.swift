@@ -33,7 +33,7 @@ struct NavigatorPanel: View {
                         }
                 )
             }
-            .frame(height: thumbHeight)
+            .frame(maxHeight: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 4))
 
             Text("Zoom: \(Int((model.zoom * 100).rounded()))%")

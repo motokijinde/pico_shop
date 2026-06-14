@@ -94,9 +94,16 @@ final class AppModel: ObservableObject {
     /// ピクセル抽出バックグラウンドタスクの再入防止フラグ
     var isMoveExtracting = false
 
-    @Published var showLoupe = false
+    @Published var showLoupe: Bool = UserDefaults.standard.bool(forKey: "loupeVisible") {
+        didSet { UserDefaults.standard.set(showLoupe, forKey: "loupeVisible") }
+    }
     @Published var showOptionsPanel = true
-    @Published var showLayersPanel = true
+    @Published var showNavigatorPanel: Bool = UserDefaults.standard.object(forKey: "navigatorPanelVisible") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showNavigatorPanel, forKey: "navigatorPanelVisible") }
+    }
+    @Published var showLayersPanel: Bool = UserDefaults.standard.object(forKey: "layerPanelVisible") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showLayersPanel, forKey: "layerPanelVisible") }
+    }
     @Published var showToolbar = true
     @Published var loupeZoom: Int = 400      // 100/200/400/800
 

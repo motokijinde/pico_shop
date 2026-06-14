@@ -1,7 +1,13 @@
 import SwiftUI
+import AppKit
+
+private class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+}
 
 @main
 struct PicoShopApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = AppModel()
 
     var body: some Scene {
@@ -104,6 +110,9 @@ struct PicoShopApp: App {
                     model.showLoupe.toggle()
                 }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
+                Button(model.showNavigatorPanel ? "ナビゲーターを隠す" : "ナビゲーターを表示") {
+                    model.showNavigatorPanel.toggle()
+                }
                 Button(model.showLayersPanel ? "レイヤーを隠す" : "レイヤーを表示") {
                     model.showLayersPanel.toggle()
                 }

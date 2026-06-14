@@ -14,6 +14,7 @@
 		A10000000000000000000021 /* AppModel+File.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000020 /* AppModel+File.swift */; };
 		A10000000000000000000023 /* CanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000022 /* CanvasView.swift */; };
 		A10000000000000000000025 /* LoupeWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000024 /* LoupeWindow.swift */; };
+		A1000000000000000000009D /* FloatingPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000009C /* FloatingPanel.swift */; };
 		A10000000000000000000027 /* Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000026 /* Helpers.swift */; };
 		A10000000000000000000029 /* Dialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000028 /* Dialogs.swift */; };
 		A1000000000000000000002B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* ContentView.swift */; };
@@ -83,6 +84,7 @@
 		A10000000000000000000020 /* AppModel+File.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+File.swift"; sourceTree = "<group>"; };
 		A10000000000000000000022 /* CanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasView.swift; sourceTree = "<group>"; };
 		A10000000000000000000024 /* LoupeWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoupeWindow.swift; sourceTree = "<group>"; };
+		A1000000000000000000009C /* FloatingPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanel.swift; sourceTree = "<group>"; };
 		A10000000000000000000026 /* Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Helpers.swift; sourceTree = "<group>"; };
 		A10000000000000000000028 /* Dialogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dialogs.swift; sourceTree = "<group>"; };
 		A1000000000000000000002A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -258,6 +260,7 @@
 				A10000000000000000000077 /* CanvasInteraction.swift */,
 				A10000000000000000000073 /* CanvasCursors.swift */,
 				A10000000000000000000024 /* LoupeWindow.swift */,
+				A1000000000000000000009C /* FloatingPanel.swift */,
 				A10000000000000000000028 /* Dialogs.swift */,
 				A10000000000000000000026 /* Helpers.swift */,
 				A1000000000000000000002C /* OptionsPanel.swift */,
@@ -383,6 +386,7 @@
 				A10000000000000000000076 /* CanvasInteraction.swift in Sources */,
 				A10000000000000000000072 /* CanvasCursors.swift in Sources */,
 				A10000000000000000000025 /* LoupeWindow.swift in Sources */,
+				A1000000000000000000009D /* FloatingPanel.swift in Sources */,
 				A10000000000000000000027 /* Helpers.swift in Sources */,
 				A10000000000000000000029 /* Dialogs.swift in Sources */,
 				A1000000000000000000002B /* ContentView.swift in Sources */,

@@ -1,18 +1,12 @@
 import SwiftUI
 
-// MARK: - サイドパネル（ナビゲーター + レイヤー + オプション）
+// MARK: - サイドパネル（オプションのみ。ナビゲーター・レイヤーはフローティング NSPanel）
 
 struct SidePanelView: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
         VStack(spacing: 0) {
-            NavigatorPanel()
-            Divider()
-            if model.showLayersPanel {
-                LayerPalette()
-                Divider()
-            }
             if model.showOptionsPanel {
                 ScrollView {
                     OptionsPanel()

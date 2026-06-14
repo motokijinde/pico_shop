@@ -26,17 +26,24 @@ struct LayerPalette: View {
             .buttonStyle(.borderless)
             .controlSize(.small)
 
-            List {
-                ForEach(model.layers) { layer in
-                    layerRow(layer)
-                        .listRowInsets(EdgeInsets(top: 2, leading: 2, bottom: 2, trailing: 2))
+            ScrollViewReader { proxy in
+                List {
+                    ForEach(model.layers) { layer in
+                        layerRow(layer)
+                            .listRowInsets(EdgeInsets(top: 2, leading: 2, bottom: 2, trailing: 2))
+                    }
+                    .onMove { from, to in
+                        model.reorderLayers(fromOffsets: from, toOffset: to)
+                    }
                 }
-                .onMove { from, to in
-                    model.reorderLayers(fromOffsets: from, toOffset: to)
+                .listStyle(.plain)
+                .frame(maxHeight: .infinity)
+                .onChange(of: model.layers.count) { _, _ in
+                    if let id = model.activeLayerID {
+                        proxy.scrollTo(id)
+                    }
                 }
             }
-            .listStyle(.plain)
-            .frame(height: 150)
 
             if let layer = model.activeLayer {
                 LayerDetailView(layer: layer)

@@ -25,8 +25,33 @@ struct ContentView: View {
                 StatusBarView()
             }
         }
-        // ルーペを NSPanel として管理（OS がウィンドウ移動を直接処理するためゼロ遅延）
-        .background(LoupePanelManager().frame(width: 0, height: 0))
+        // ルーペ・ナビゲーター・レイヤーを NSPanel として管理
+        .background(
+            ZStack {
+                FloatingPanelManager(
+                    isVisible: $model.showLoupe,
+                    title: "ルーペ",
+                    autosaveName: "LoupePanel",
+                    minSize: NSSize(width: 160, height: 216),
+                    defaultSize: NSSize(width: 200, height: 256)
+                ) { LoupePanelContent().environmentObject(model) }
+                FloatingPanelManager(
+                    isVisible: $model.showNavigatorPanel,
+                    title: "ナビゲーター",
+                    autosaveName: "NavigatorPanel",
+                    minSize: NSSize(width: 160, height: 140),
+                    defaultSize: NSSize(width: 200, height: 180)
+                ) { NavigatorPanel().environmentObject(model) }
+                FloatingPanelManager(
+                    isVisible: $model.showLayersPanel,
+                    title: "レイヤー",
+                    autosaveName: "LayerPanel",
+                    minSize: NSSize(width: 180, height: 200),
+                    defaultSize: NSSize(width: 220, height: 280)
+                ) { LayerPalette().environmentObject(model) }
+            }
+            .frame(width: 0, height: 0)
+        )
         .sheet(isPresented: $model.showNewFileDialog) { NewFileDialog() }
         .sheet(isPresented: $model.showCanvasSizeDialog) { CanvasSizeDialog() }
         .sheet(isPresented: $model.showModifySelectionDialog) { ModifySelectionDialog() }
@@ -119,12 +144,6 @@ struct ToolbarView: View {
 
             Divider().frame(height: 16)
 
-            Toggle(isOn: $model.showLoupe) {
-                Label("ルーペ", systemImage: "magnifyingglass.circle")
-            }
-            .toggleStyle(.button)
-            .help("ルーペの表示/非表示")
-
             Spacer()
 
             if let msg = model.statusMessage {
@@ -213,16 +232,48 @@ struct ToolPaletteView: View {
                 }
             }
             Spacer()
+            Divider().padding(.horizontal, 6).padding(.bottom, 2)
+            PaletteToggleButton(systemImage: "magnifyingglass.circle", help: "ルーペ", isOn: $model.showLoupe)
+            PaletteToggleButton(systemImage: "map", help: "ナビゲーター", isOn: $model.showNavigatorPanel)
+            PaletteToggleButton(systemImage: "square.stack", help: "レイヤー", isOn: $model.showLayersPanel)
+            Divider().padding(.horizontal, 6).padding(.vertical, 2)
             RoundedRectangle(cornerRadius: 4)
                 .fill(Color(nsColor: model.foregroundColor.nsColor))
                 .frame(width: 26, height: 26)
                 .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.secondary.opacity(0.5)))
                 .help("前景色 \(model.foregroundColor.hexString)")
                 .padding(.bottom, 8)
+                .padding(.top, 4)
         }
         .padding(.top, 8)
         .frame(maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+}
+
+private struct PaletteToggleButton: View {
+    let systemImage: String
+    let help: String
+    @Binding var isOn: Bool
+    @State private var isHovering = false
+
+    var body: some View {
+        Button { isOn.toggle() } label: {
+            Image(systemName: systemImage)
+                .symbolRenderingMode(.monochrome)
+                .font(.system(size: 14))
+                .frame(width: 34, height: 28)
+                .background(background, in: RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .onHover { isHovering = $0 }
+    }
+
+    private var background: Color {
+        if isOn       { return Color.accentColor.opacity(0.35) }
+        if isHovering { return Color.secondary.opacity(0.18) }
+        return .clear
     }
 }
 
