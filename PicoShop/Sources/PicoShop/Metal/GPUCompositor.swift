@@ -5,10 +5,16 @@ import Foundation
 // MARK: - GPU レイヤー合成器
 //
 // 全可視レイヤーをピンポン方式で合成テクスチャ（premultiplied sRGB / top-left）に描く。
-// ブレンドモードは blend_fragment シェーダで CPU 版 Compositor と同じ式を実装。
+// ブレンドモードは blend_fragment シェーダで CPUCompositor と同じ式を実装。
 // 結果はキャンバス・ルーペ・ナビゲーターの各ビューが共有する。
 
 final class GPUCompositor {
+
+    struct FloatingPreview {
+        var layer: Layer
+        var originalBounds: CGRect
+        var transform: SelectionTransform
+    }
 
     private let engine: MetalEngine
     private let store: LayerTextureStore
@@ -42,7 +48,7 @@ final class GPUCompositor {
 
     /// layers（先頭が最上位）を bounds の範囲で合成する。コミットのみ行い完了は待たない
     /// （以降の描画・読み出しは同一キューなので順序が保証される）。
-    func composite(layers: [Layer], bounds: CGRect) {
+    func composite(layers: [Layer], bounds: CGRect, floatingPreview: FloatingPreview? = nil) {
         let w = Int(bounds.width.rounded()), h = Int(bounds.height.rounded())
         guard w > 0, h > 0 else { return }
         ensureTargets(width: w, height: h)
@@ -76,6 +82,10 @@ final class GPUCompositor {
             target = dst  // 最後に書き込んだテクスチャ
         }
 
+        if let floatingPreview {
+            encodeFloatingPreview(cmd: cmd, preview: floatingPreview, bounds: bounds, target: target)
+        }
+
         if target.mipmapLevelCount > 1, let blit = cmd.makeBlitCommandEncoder() {
             blit.generateMipmaps(for: target)
             blit.endEncoding()
@@ -93,29 +103,44 @@ final class GPUCompositor {
         pass.colorAttachments[0].storeAction = .store
         guard let enc = cmd.makeRenderCommandEncoder(descriptor: pass) else { return }
 
-        let w = CGFloat(target.width), h = CGFloat(target.height)
-        var verts = MetalEngine.quadVertices(rect: CGRect(x: 0, y: 0, width: w, height: h),
-                                             uvRect: CGRect(x: 0, y: 0, width: 1, height: 1))
-        var viewU = ViewUniforms(viewSize: [Float(w), Float(h)])
-        var blendU = BlendUniforms(
-            compositeSize: [Float(w), Float(h)],
-            layerOrigin: [Float(CGFloat(layer.offsetX) - bounds.minX),
-                          Float(CGFloat(layer.offsetY) - bounds.minY)],
-            layerSize: [Float(src.width), Float(src.height)],
-            opacity: Float(layer.opacity / 100),
-            mode: layer.blend.gpuMode
-        )
-
-        enc.setRenderPipelineState(engine.blendPipeline)
-        enc.setVertexBytes(&verts, length: MemoryLayout<QuadVertexIn>.stride * verts.count, index: 0)
-        enc.setVertexBytes(&viewU, length: MemoryLayout<ViewUniforms>.stride, index: 1)
-        enc.setFragmentBytes(&blendU, length: MemoryLayout<BlendUniforms>.stride, index: 0)
-        enc.setFragmentTexture(dst, index: 0)
-        enc.setFragmentTexture(src, index: 1)
-        enc.setFragmentSamplerState(engine.nearestClampSampler, index: 0)
-        enc.setFragmentSamplerState(engine.nearestBorderSampler, index: 1)
-        enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: verts.count)
+        let targetSize = CGSize(width: target.width, height: target.height)
+        MetalQuadEncoder(engine: engine, encoder: enc, viewSize: targetSize)
+            .drawBlendPass(destination: dst, source: src, targetSize: targetSize,
+                           layer: layer, bounds: bounds)
         enc.endEncoding()
+    }
+
+    private func encodeFloatingPreview(cmd: MTLCommandBuffer, preview: FloatingPreview,
+                                       bounds: CGRect, target: MTLTexture) {
+        guard let src = store.texture(for: preview.layer) else { return }
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = target
+        pass.colorAttachments[0].loadAction = .load
+        pass.colorAttachments[0].storeAction = .store
+        guard let enc = cmd.makeRenderCommandEncoder(descriptor: pass) else { return }
+
+        let vertices = floatingPreviewVertices(preview, compositeBounds: bounds)
+        let targetSize = CGSize(width: target.width, height: target.height)
+        MetalQuadEncoder(engine: engine, encoder: enc, viewSize: targetSize)
+            .drawPremultipliedTexture(src, vertices: vertices,
+                                      sampler: engine.linearClampSampler,
+                                      alpha: Float(preview.layer.opacity / 100))
+        enc.endEncoding()
+    }
+
+    private func floatingPreviewVertices(_ preview: FloatingPreview, compositeBounds: CGRect) -> [QuadVertexIn] {
+        let b = preview.originalBounds
+        let affine = preview.transform.affine(center: CGPoint(x: b.midX, y: b.midY))
+        func targetPoint(_ p: CGPoint) -> CGPoint {
+            let q = p.applying(affine)
+            return CGPoint(x: q.x - compositeBounds.minX, y: q.y - compositeBounds.minY)
+        }
+        return MetalEngine.quadVertices(
+            topLeft: targetPoint(CGPoint(x: b.minX, y: b.minY)),
+            topRight: targetPoint(CGPoint(x: b.maxX, y: b.minY)),
+            bottomLeft: targetPoint(CGPoint(x: b.minX, y: b.maxY)),
+            bottomRight: targetPoint(CGPoint(x: b.maxX, y: b.maxY))
+        )
     }
 
     private func ensureTargets(width: Int, height: Int) {

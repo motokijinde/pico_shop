@@ -63,6 +63,10 @@ extension LayerBlendMode {
     }
 }
 
+struct TextureUniforms {
+    var alpha: Float
+}
+
 // MARK: - MSL ソース（SwiftPM executable では metallib バンドルが扱いにくいため実行時コンパイル）
 
 let picoShaderSource = """
@@ -98,6 +102,17 @@ fragment float4 quad_fragment(QuadVaryings in [[stage_in]],
                               sampler smp [[sampler(0)]],
                               constant float &alpha [[buffer(0)]]) {
     return tex.sample(smp, in.uv) * alpha;
+}
+
+struct TextureUniforms { float alpha; };
+
+fragment float4 texture_premultiply_fragment(QuadVaryings in [[stage_in]],
+                                             texture2d<float> tex [[texture(0)]],
+                                             sampler smp [[sampler(0)]],
+                                             constant TextureUniforms &u [[buffer(0)]]) {
+    float4 c = tex.sample(smp, in.uv);
+    c.rgb *= c.a;
+    return c * u.alpha;
 }
 
 struct CheckerUniforms {

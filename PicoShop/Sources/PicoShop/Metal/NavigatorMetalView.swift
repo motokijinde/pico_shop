@@ -69,7 +69,7 @@ final class NavigatorRenderer: NSObject, MTKViewDelegate {
 
             guard let enc = cmd.makeRenderCommandEncoder(descriptor: rpd) else { return }
             let viewSize = view.bounds.size
-            var viewU = ViewUniforms(viewSize: [Float(viewSize.width), Float(viewSize.height)])
+            let quad = MetalQuadEncoder(engine: engine, encoder: enc, viewSize: viewSize)
 
             let b = model.compositeBounds
             let scale = min(viewSize.width / max(1, b.width), viewSize.height / max(1, b.height))
@@ -78,17 +78,9 @@ final class NavigatorRenderer: NSObject, MTKViewDelegate {
                                  y: (viewSize.height - thumbSize.height) / 2)
 
             if let texture = model.gpuCompositor?.compositeTexture {
-                var verts = MetalEngine.quadVertices(
-                    rect: CGRect(origin: origin, size: thumbSize),
-                    uvRect: CGRect(x: 0, y: 0, width: 1, height: 1))
-                var alpha: Float = 1
-                enc.setRenderPipelineState(engine.quadPipeline)
-                enc.setVertexBytes(&verts, length: MemoryLayout<QuadVertexIn>.stride * verts.count, index: 0)
-                enc.setVertexBytes(&viewU, length: MemoryLayout<ViewUniforms>.stride, index: 1)
-                enc.setFragmentBytes(&alpha, length: MemoryLayout<Float>.stride, index: 0)
-                enc.setFragmentTexture(texture, index: 0)
-                enc.setFragmentSamplerState(engine.linearMipSampler, index: 0)
-                enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: verts.count)
+                quad.drawTexture(texture, rect: CGRect(origin: origin, size: thumbSize),
+                                 uvRect: CGRect(x: 0, y: 0, width: 1, height: 1),
+                                 sampler: engine.linearMipSampler)
             }
 
             // 赤枠：現在見えている範囲

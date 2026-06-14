@@ -31,10 +31,14 @@ final class MetalEngine {
     let quadPipeline: MTLRenderPipelineState
     let checkerPipeline: MTLRenderPipelineState
     let shapePipeline: MTLRenderPipelineState
+    /// 画面描画用（PixelBuffer テクスチャを描画時に premultiply）
+    let texturePremultiplyViewPipeline: MTLRenderPipelineState
     /// B&Wマスクプレビュー用（色域選択ツール）
     let bwMaskPipeline: MTLRenderPipelineState
     /// オフスクリーン合成用（ターゲット: rgba8Unorm、全ピクセル上書き）
     let blendPipeline: MTLRenderPipelineState
+    /// オフスクリーン合成テクスチャへ PixelBuffer テクスチャを通常合成する
+    let texturePremultiplyCompositePipeline: MTLRenderPipelineState
     /// 1×1 r8Unorm value=0（B&Wプレビューで選択なし時の黒テクスチャ）
     let blackR8Texture: MTLTexture
 
@@ -67,9 +71,19 @@ final class MetalEngine {
         shapePipeline = try Self.makePipeline(device: device, library: lib,
                                               vertex: "shape_vertex", fragment: "shape_fragment",
                                               format: Self.viewPixelFormat, blending: true)
+        texturePremultiplyViewPipeline = try Self.makePipeline(device: device, library: lib,
+                                                               vertex: "quad_vertex",
+                                                               fragment: "texture_premultiply_fragment",
+                                                               format: Self.viewPixelFormat,
+                                                               blending: true)
         blendPipeline = try Self.makePipeline(device: device, library: lib,
                                               vertex: "quad_vertex", fragment: "blend_fragment",
                                               format: Self.compositePixelFormat, blending: false)
+        texturePremultiplyCompositePipeline = try Self.makePipeline(device: device, library: lib,
+                                                                    vertex: "quad_vertex",
+                                                                    fragment: "texture_premultiply_fragment",
+                                                                    format: Self.compositePixelFormat,
+                                                                    blending: true)
         bwMaskPipeline = try Self.makePipeline(device: device, library: lib,
                                                vertex: "quad_vertex", fragment: "bw_mask_fragment",
                                                format: Self.viewPixelFormat, blending: true)
@@ -145,6 +159,18 @@ final class MetalEngine {
             QuadVertexIn(pos: [x1, y0], uv: [u1, v0]),
             QuadVertexIn(pos: [x1, y1], uv: [u1, v1]),
             QuadVertexIn(pos: [x0, y1], uv: [u0, v1]),
+        ]
+    }
+
+    static func quadVertices(topLeft: CGPoint, topRight: CGPoint,
+                             bottomLeft: CGPoint, bottomRight: CGPoint) -> [QuadVertexIn] {
+        [
+            QuadVertexIn(pos: [Float(topLeft.x), Float(topLeft.y)], uv: [0, 0]),
+            QuadVertexIn(pos: [Float(topRight.x), Float(topRight.y)], uv: [1, 0]),
+            QuadVertexIn(pos: [Float(bottomLeft.x), Float(bottomLeft.y)], uv: [0, 1]),
+            QuadVertexIn(pos: [Float(topRight.x), Float(topRight.y)], uv: [1, 0]),
+            QuadVertexIn(pos: [Float(bottomRight.x), Float(bottomRight.y)], uv: [1, 1]),
+            QuadVertexIn(pos: [Float(bottomLeft.x), Float(bottomLeft.y)], uv: [0, 1]),
         ]
     }
 }

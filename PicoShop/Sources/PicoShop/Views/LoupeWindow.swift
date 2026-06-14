@@ -170,12 +170,15 @@ private struct LoupeToggleButton: View {
 private struct LoupeInfoBar: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject var hover: HoverState
+    @State private var sampledX: Int?
+    @State private var sampledY: Int?
+    @State private var sampledColor: PixelColor?
 
     var body: some View {
         let pos = hover.mouseCanvasPos ?? model.canvasCenter
         let px  = Int(pos.x.rounded(.down))
         let py  = Int(pos.y.rounded(.down))
-        let c   = model.compositeColor(atCanvas: pos)
+        let c   = sampledColor
 
         VStack(alignment: .leading, spacing: 3) {
             // Row 1: スウォッチ + Hex
@@ -206,6 +209,22 @@ private struct LoupeInfoBar: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear { sampleColor(force: true) }
+        .onChange(of: hover.mouseCanvasPos) { _, _ in sampleColor(force: false) }
+        .onChange(of: model.compositeBounds) { _, _ in sampleColor(force: true) }
+        .onReceive(model.objectWillChange) { _ in
+            Task { @MainActor in sampleColor(force: true) }
+        }
+    }
+
+    private func sampleColor(force: Bool) {
+        let pos = hover.mouseCanvasPos ?? model.canvasCenter
+        let px = Int(pos.x.rounded(.down))
+        let py = Int(pos.y.rounded(.down))
+        guard force || sampledX != px || sampledY != py else { return }
+        sampledX = px
+        sampledY = py
+        sampledColor = model.compositeColor(atCanvas: pos)
     }
 
     private func coordView(_ label: String, _ value: Int) -> some View {

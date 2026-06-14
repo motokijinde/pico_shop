@@ -180,9 +180,9 @@ enum Exporter {
         case .canvas:
             bounds = CGRect(x: 0, y: 0, width: canvasWidth, height: canvasHeight)
         case .allLayers:
-            bounds = Compositor.unionBounds(layers: layers, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
+            bounds = CPUCompositor.unionBounds(layers: layers, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
         }
-        guard let cg = Compositor.composite(layers: layers, bounds: bounds) else {
+        guard let cg = CPUCompositor.composite(layers: layers, bounds: bounds) else {
             throw ProjectIO.IOError.pngEncodeFailed
         }
         let rep = NSBitmapImageRep(cgImage: cg)

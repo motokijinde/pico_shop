@@ -144,9 +144,9 @@ struct PixelBuffer {
         return px
     }
 
-    // MARK: 変形
+    // MARK: CPU/CoreGraphics 変形
 
-    func resized(width newW: Int, height newH: Int, quality: ResampleQuality) -> PixelBuffer {
+    func cpuResized(width newW: Int, height newH: Int, quality: ResampleQuality) -> PixelBuffer {
         guard newW > 0, newH > 0, let src = makeCGImage() else {
             return PixelBuffer(width: max(1, newW), height: max(1, newH))
         }
@@ -186,7 +186,7 @@ struct PixelBuffer {
 
     /// 中心を基準に任意角度回転。バウンディングボックスは拡張される。
     /// 戻り値は新バッファと、レイヤーオフセットに加算すべき補正値。
-    func rotated(byDegrees deg: Double, quality: ResampleQuality) -> (PixelBuffer, dx: Int, dy: Int) {
+    func cpuRotated(byDegrees deg: Double, quality: ResampleQuality) -> (PixelBuffer, dx: Int, dy: Int) {
         let rad = deg * .pi / 180
         let c = abs(cos(rad)), s = abs(sin(rad))
         let newW = max(1, Int((Double(width) * c + Double(height) * s).rounded()))

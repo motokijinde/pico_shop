@@ -10,7 +10,6 @@
 		A10000000000000000000017 /* PicoShopApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* PicoShopApp.swift */; };
 		A10000000000000000000019 /* ProjectIO.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000018 /* ProjectIO.swift */; };
 		A1000000000000000000001B /* ToolTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A /* ToolTypes.swift */; };
-		A1000000000000000000001D /* AppModel+Operations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001C /* AppModel+Operations.swift */; };
 		A1000000000000000000001F /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001E /* AppModel.swift */; };
 		A10000000000000000000021 /* AppModel+File.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000020 /* AppModel+File.swift */; };
 		A10000000000000000000023 /* CanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000022 /* CanvasView.swift */; };
@@ -35,6 +34,43 @@
 		A10000000000000000000049 /* OverlayRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000048 /* OverlayRenderer.swift */; };
 		A1000000000000000000004B /* OverlayScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000004A /* OverlayScene.swift */; };
 		A1000000000000000000004D /* ShaderSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000004C /* ShaderSource.swift */; };
+		A10000000000000000000050 /* AppModel+DocumentLayerOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000051 /* AppModel+DocumentLayerOperations.swift */; };
+		A10000000000000000000052 /* AppModel+CanvasOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000053 /* AppModel+CanvasOperations.swift */; };
+		A10000000000000000000054 /* AppModel+SelectionOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000055 /* AppModel+SelectionOperations.swift */; };
+		A10000000000000000000056 /* AppModel+PixelEditOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000057 /* AppModel+PixelEditOperations.swift */; };
+		A10000000000000000000058 /* AppModel+MoveTransformOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000059 /* AppModel+MoveTransformOperations.swift */; };
+		A1000000000000000000005A /* AppModel+TransformOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005B /* AppModel+TransformOperations.swift */; };
+		A1000000000000000000005C /* AppModel+EditOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005D /* AppModel+EditOperations.swift */; };
+		A1000000000000000000005E /* SelectionOptionsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005F /* SelectionOptionsViews.swift */; };
+		A10000000000000000000060 /* TransformOptionsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000061 /* TransformOptionsViews.swift */; };
+		A10000000000000000000062 /* EditOptionsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000063 /* EditOptionsViews.swift */; };
+		A10000000000000000000064 /* AppModel+Startup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000065 /* AppModel+Startup.swift */; };
+		A10000000000000000000066 /* AppModel+LayerAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000067 /* AppModel+LayerAccess.swift */; };
+		A10000000000000000000068 /* AppModel+Compositing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000069 /* AppModel+Compositing.swift */; };
+		A1000000000000000000006A /* AppModel+Viewport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000006B /* AppModel+Viewport.swift */; };
+		A1000000000000000000006C /* AppModel+Undo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000006D /* AppModel+Undo.swift */; };
+		A1000000000000000000006E /* AppModel+Keyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000006F /* AppModel+Keyboard.swift */; };
+		A10000000000000000000070 /* AppModel+TransformHandles.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000071 /* AppModel+TransformHandles.swift */; };
+		A10000000000000000000072 /* CanvasCursors.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000073 /* CanvasCursors.swift */; };
+		A10000000000000000000074 /* CanvasDragHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000075 /* CanvasDragHandling.swift */; };
+		A10000000000000000000076 /* CanvasInteraction.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000077 /* CanvasInteraction.swift */; };
+		A10000000000000000000078 /* MoveTransformOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000079 /* MoveTransformOptionsView.swift */; };
+		A1000000000000000000007A /* LayerMoveOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000007B /* LayerMoveOptionsView.swift */; };
+		A1000000000000000000007C /* PixelTransformOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000007D /* PixelTransformOptionsView.swift */; };
+		A1000000000000000000007E /* CanvasImageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000007F /* CanvasImageRenderer.swift */; };
+		A10000000000000000000080 /* CanvasOverlaySceneBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000081 /* CanvasOverlaySceneBuilder.swift */; };
+		A10000000000000000000082 /* CanvasSelectionOverlayRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000083 /* CanvasSelectionOverlayRenderer.swift */; };
+		A10000000000000000000084 /* CanvasRulerRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000085 /* CanvasRulerRenderer.swift */; };
+		A10000000000000000000086 /* CanvasTransformDragging.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000087 /* CanvasTransformDragging.swift */; };
+		A10000000000000000000088 /* NavigatorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000089 /* NavigatorPanel.swift */; };
+		A1000000000000000000008A /* LayerPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000008B /* LayerPalette.swift */; };
+		A1000000000000000000008C /* LayerDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000008D /* LayerDetailView.swift */; };
+		A10000000000000000000090 /* TransformFieldMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000091 /* TransformFieldMath.swift */; };
+		A10000000000000000000092 /* MetalQuadEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000093 /* MetalQuadEncoder.swift */; };
+		A10000000000000000000094 /* CanvasOutlineRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000095 /* CanvasOutlineRenderer.swift */; };
+		A10000000000000000000096 /* PixelTransformEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000097 /* PixelTransformEngine.swift */; };
+		A10000000000000000000098 /* AppModel+AsyncTasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000099 /* AppModel+AsyncTasks.swift */; };
+		A1000000000000000000009A /* LayerThumbnailMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000009B /* LayerThumbnailMetalView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -43,7 +79,6 @@
 		A10000000000000000000016 /* PicoShopApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PicoShopApp.swift; sourceTree = "<group>"; };
 		A10000000000000000000018 /* ProjectIO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectIO.swift; sourceTree = "<group>"; };
 		A1000000000000000000001A /* ToolTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolTypes.swift; sourceTree = "<group>"; };
-		A1000000000000000000001C /* AppModel+Operations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Operations.swift"; sourceTree = "<group>"; };
 		A1000000000000000000001E /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		A10000000000000000000020 /* AppModel+File.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+File.swift"; sourceTree = "<group>"; };
 		A10000000000000000000022 /* CanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasView.swift; sourceTree = "<group>"; };
@@ -68,6 +103,43 @@
 		A10000000000000000000048 /* OverlayRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayRenderer.swift; sourceTree = "<group>"; };
 		A1000000000000000000004A /* OverlayScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayScene.swift; sourceTree = "<group>"; };
 		A1000000000000000000004C /* ShaderSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderSource.swift; sourceTree = "<group>"; };
+		A10000000000000000000051 /* AppModel+DocumentLayerOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+DocumentLayerOperations.swift"; sourceTree = "<group>"; };
+		A10000000000000000000053 /* AppModel+CanvasOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+CanvasOperations.swift"; sourceTree = "<group>"; };
+		A10000000000000000000055 /* AppModel+SelectionOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SelectionOperations.swift"; sourceTree = "<group>"; };
+		A10000000000000000000057 /* AppModel+PixelEditOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+PixelEditOperations.swift"; sourceTree = "<group>"; };
+		A10000000000000000000059 /* AppModel+MoveTransformOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MoveTransformOperations.swift"; sourceTree = "<group>"; };
+		A1000000000000000000005B /* AppModel+TransformOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+TransformOperations.swift"; sourceTree = "<group>"; };
+		A1000000000000000000005D /* AppModel+EditOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+EditOperations.swift"; sourceTree = "<group>"; };
+		A1000000000000000000005F /* SelectionOptionsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionOptionsViews.swift; sourceTree = "<group>"; };
+		A10000000000000000000061 /* TransformOptionsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransformOptionsViews.swift; sourceTree = "<group>"; };
+		A10000000000000000000063 /* EditOptionsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditOptionsViews.swift; sourceTree = "<group>"; };
+		A10000000000000000000065 /* AppModel+Startup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Startup.swift"; sourceTree = "<group>"; };
+		A10000000000000000000067 /* AppModel+LayerAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+LayerAccess.swift"; sourceTree = "<group>"; };
+		A10000000000000000000069 /* AppModel+Compositing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Compositing.swift"; sourceTree = "<group>"; };
+		A1000000000000000000006B /* AppModel+Viewport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Viewport.swift"; sourceTree = "<group>"; };
+		A1000000000000000000006D /* AppModel+Undo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Undo.swift"; sourceTree = "<group>"; };
+		A1000000000000000000006F /* AppModel+Keyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Keyboard.swift"; sourceTree = "<group>"; };
+		A10000000000000000000071 /* AppModel+TransformHandles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+TransformHandles.swift"; sourceTree = "<group>"; };
+		A10000000000000000000073 /* CanvasCursors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CanvasCursors.swift"; sourceTree = "<group>"; };
+		A10000000000000000000075 /* CanvasDragHandling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasDragHandling.swift; sourceTree = "<group>"; };
+		A10000000000000000000077 /* CanvasInteraction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasInteraction.swift; sourceTree = "<group>"; };
+		A10000000000000000000079 /* MoveTransformOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveTransformOptionsView.swift; sourceTree = "<group>"; };
+		A1000000000000000000007B /* LayerMoveOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayerMoveOptionsView.swift; sourceTree = "<group>"; };
+		A1000000000000000000007D /* PixelTransformOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelTransformOptionsView.swift; sourceTree = "<group>"; };
+		A1000000000000000000007F /* CanvasImageRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasImageRenderer.swift; sourceTree = "<group>"; };
+		A10000000000000000000081 /* CanvasOverlaySceneBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasOverlaySceneBuilder.swift; sourceTree = "<group>"; };
+		A10000000000000000000083 /* CanvasSelectionOverlayRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasSelectionOverlayRenderer.swift; sourceTree = "<group>"; };
+		A10000000000000000000085 /* CanvasRulerRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasRulerRenderer.swift; sourceTree = "<group>"; };
+		A10000000000000000000087 /* CanvasTransformDragging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasTransformDragging.swift; sourceTree = "<group>"; };
+		A10000000000000000000089 /* NavigatorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigatorPanel.swift; sourceTree = "<group>"; };
+		A1000000000000000000008B /* LayerPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayerPalette.swift; sourceTree = "<group>"; };
+		A1000000000000000000008D /* LayerDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayerDetailView.swift; sourceTree = "<group>"; };
+		A10000000000000000000091 /* TransformFieldMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransformFieldMath.swift; sourceTree = "<group>"; };
+		A10000000000000000000093 /* MetalQuadEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalQuadEncoder.swift; sourceTree = "<group>"; };
+		A10000000000000000000095 /* CanvasOutlineRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasOutlineRenderer.swift; sourceTree = "<group>"; };
+		A10000000000000000000097 /* PixelTransformEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelTransformEngine.swift; sourceTree = "<group>"; };
+		A10000000000000000000099 /* AppModel+AsyncTasks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+AsyncTasks.swift"; sourceTree = "<group>"; };
+		A1000000000000000000009B /* LayerThumbnailMetalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayerThumbnailMetalView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -123,8 +195,15 @@
 			isa = PBXGroup;
 			children = (
 				A1000000000000000000003C /* CanvasMetalView.swift */,
+				A10000000000000000000093 /* MetalQuadEncoder.swift */,
+				A1000000000000000000007F /* CanvasImageRenderer.swift */,
+				A10000000000000000000081 /* CanvasOverlaySceneBuilder.swift */,
+				A10000000000000000000095 /* CanvasOutlineRenderer.swift */,
+				A10000000000000000000083 /* CanvasSelectionOverlayRenderer.swift */,
+				A10000000000000000000085 /* CanvasRulerRenderer.swift */,
 				A1000000000000000000003E /* GPUCompositor.swift */,
 				A10000000000000000000040 /* LayerTextureStore.swift */,
+				A1000000000000000000009B /* LayerThumbnailMetalView.swift */,
 				A10000000000000000000042 /* LoupeMetalView.swift */,
 				A10000000000000000000044 /* MetalEngine.swift */,
 				A10000000000000000000046 /* NavigatorMetalView.swift */,
@@ -147,7 +226,21 @@
 			isa = PBXGroup;
 			children = (
 				A1000000000000000000001E /* AppModel.swift */,
-				A1000000000000000000001C /* AppModel+Operations.swift */,
+				A10000000000000000000065 /* AppModel+Startup.swift */,
+				A10000000000000000000067 /* AppModel+LayerAccess.swift */,
+				A10000000000000000000069 /* AppModel+Compositing.swift */,
+				A1000000000000000000006B /* AppModel+Viewport.swift */,
+				A1000000000000000000006D /* AppModel+Undo.swift */,
+				A1000000000000000000006F /* AppModel+Keyboard.swift */,
+				A10000000000000000000071 /* AppModel+TransformHandles.swift */,
+				A10000000000000000000051 /* AppModel+DocumentLayerOperations.swift */,
+				A10000000000000000000053 /* AppModel+CanvasOperations.swift */,
+				A10000000000000000000055 /* AppModel+SelectionOperations.swift */,
+				A10000000000000000000057 /* AppModel+PixelEditOperations.swift */,
+				A10000000000000000000059 /* AppModel+MoveTransformOperations.swift */,
+				A10000000000000000000099 /* AppModel+AsyncTasks.swift */,
+				A1000000000000000000005B /* AppModel+TransformOperations.swift */,
+				A1000000000000000000005D /* AppModel+EditOperations.swift */,
 				A10000000000000000000020 /* AppModel+File.swift */,
 				A1000000000000000000001A /* ToolTypes.swift */,
 				A1000000000000000000003A /* HoverState.swift */,
@@ -160,11 +253,25 @@
 			children = (
 				A1000000000000000000002A /* ContentView.swift */,
 				A10000000000000000000022 /* CanvasView.swift */,
+				A10000000000000000000075 /* CanvasDragHandling.swift */,
+				A10000000000000000000087 /* CanvasTransformDragging.swift */,
+				A10000000000000000000077 /* CanvasInteraction.swift */,
+				A10000000000000000000073 /* CanvasCursors.swift */,
 				A10000000000000000000024 /* LoupeWindow.swift */,
 				A10000000000000000000028 /* Dialogs.swift */,
 				A10000000000000000000026 /* Helpers.swift */,
 				A1000000000000000000002C /* OptionsPanel.swift */,
+				A1000000000000000000005F /* SelectionOptionsViews.swift */,
+				A10000000000000000000061 /* TransformOptionsViews.swift */,
+				A10000000000000000000091 /* TransformFieldMath.swift */,
+				A10000000000000000000079 /* MoveTransformOptionsView.swift */,
+				A1000000000000000000007B /* LayerMoveOptionsView.swift */,
+				A1000000000000000000007D /* PixelTransformOptionsView.swift */,
+				A10000000000000000000063 /* EditOptionsViews.swift */,
 				A1000000000000000000002E /* SidePanel.swift */,
+				A1000000000000000000008D /* LayerDetailView.swift */,
+				A1000000000000000000008B /* LayerPalette.swift */,
+				A10000000000000000000089 /* NavigatorPanel.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -176,6 +283,7 @@
 				A10000000000000000000032 /* ColorRangeEngine.swift */,
 				A10000000000000000000034 /* SelectionMask.swift */,
 				A10000000000000000000036 /* PixelBuffer.swift */,
+				A10000000000000000000097 /* PixelTransformEngine.swift */,
 				A10000000000000000000038 /* Layer.swift */,
 			);
 			path = Engine;
@@ -252,25 +360,61 @@
 				A10000000000000000000017 /* PicoShopApp.swift in Sources */,
 				A10000000000000000000019 /* ProjectIO.swift in Sources */,
 				A1000000000000000000001B /* ToolTypes.swift in Sources */,
-				A1000000000000000000001D /* AppModel+Operations.swift in Sources */,
 				A1000000000000000000001F /* AppModel.swift in Sources */,
+				A10000000000000000000064 /* AppModel+Startup.swift in Sources */,
+				A10000000000000000000066 /* AppModel+LayerAccess.swift in Sources */,
+				A10000000000000000000068 /* AppModel+Compositing.swift in Sources */,
+				A1000000000000000000006A /* AppModel+Viewport.swift in Sources */,
+				A1000000000000000000006C /* AppModel+Undo.swift in Sources */,
+				A1000000000000000000006E /* AppModel+Keyboard.swift in Sources */,
+				A10000000000000000000070 /* AppModel+TransformHandles.swift in Sources */,
 				A10000000000000000000021 /* AppModel+File.swift in Sources */,
+				A10000000000000000000050 /* AppModel+DocumentLayerOperations.swift in Sources */,
+				A10000000000000000000052 /* AppModel+CanvasOperations.swift in Sources */,
+				A10000000000000000000054 /* AppModel+SelectionOperations.swift in Sources */,
+				A10000000000000000000056 /* AppModel+PixelEditOperations.swift in Sources */,
+				A10000000000000000000058 /* AppModel+MoveTransformOperations.swift in Sources */,
+				A10000000000000000000098 /* AppModel+AsyncTasks.swift in Sources */,
+				A1000000000000000000005A /* AppModel+TransformOperations.swift in Sources */,
+				A1000000000000000000005C /* AppModel+EditOperations.swift in Sources */,
 				A10000000000000000000023 /* CanvasView.swift in Sources */,
+				A10000000000000000000074 /* CanvasDragHandling.swift in Sources */,
+				A10000000000000000000086 /* CanvasTransformDragging.swift in Sources */,
+				A10000000000000000000076 /* CanvasInteraction.swift in Sources */,
+				A10000000000000000000072 /* CanvasCursors.swift in Sources */,
 				A10000000000000000000025 /* LoupeWindow.swift in Sources */,
 				A10000000000000000000027 /* Helpers.swift in Sources */,
 				A10000000000000000000029 /* Dialogs.swift in Sources */,
 				A1000000000000000000002B /* ContentView.swift in Sources */,
 				A1000000000000000000002D /* OptionsPanel.swift in Sources */,
+				A1000000000000000000005E /* SelectionOptionsViews.swift in Sources */,
+				A10000000000000000000060 /* TransformOptionsViews.swift in Sources */,
+				A10000000000000000000090 /* TransformFieldMath.swift in Sources */,
+				A10000000000000000000078 /* MoveTransformOptionsView.swift in Sources */,
+				A1000000000000000000007A /* LayerMoveOptionsView.swift in Sources */,
+				A1000000000000000000007C /* PixelTransformOptionsView.swift in Sources */,
+				A10000000000000000000062 /* EditOptionsViews.swift in Sources */,
 				A1000000000000000000002F /* SidePanel.swift in Sources */,
+				A1000000000000000000008C /* LayerDetailView.swift in Sources */,
+				A1000000000000000000008A /* LayerPalette.swift in Sources */,
+				A10000000000000000000088 /* NavigatorPanel.swift in Sources */,
 				A10000000000000000000031 /* TextRenderer.swift in Sources */,
 				A10000000000000000000033 /* ColorRangeEngine.swift in Sources */,
 				A10000000000000000000035 /* SelectionMask.swift in Sources */,
 				A10000000000000000000037 /* PixelBuffer.swift in Sources */,
+				A10000000000000000000096 /* PixelTransformEngine.swift in Sources */,
 				A10000000000000000000039 /* Layer.swift in Sources */,
 				A1000000000000000000003B /* HoverState.swift in Sources */,
 				A1000000000000000000003D /* CanvasMetalView.swift in Sources */,
+				A10000000000000000000092 /* MetalQuadEncoder.swift in Sources */,
+				A1000000000000000000007E /* CanvasImageRenderer.swift in Sources */,
+				A10000000000000000000080 /* CanvasOverlaySceneBuilder.swift in Sources */,
+				A10000000000000000000094 /* CanvasOutlineRenderer.swift in Sources */,
+				A10000000000000000000082 /* CanvasSelectionOverlayRenderer.swift in Sources */,
+				A10000000000000000000084 /* CanvasRulerRenderer.swift in Sources */,
 				A1000000000000000000003F /* GPUCompositor.swift in Sources */,
 				A10000000000000000000041 /* LayerTextureStore.swift in Sources */,
+				A1000000000000000000009A /* LayerThumbnailMetalView.swift in Sources */,
 				A10000000000000000000043 /* LoupeMetalView.swift in Sources */,
 				A10000000000000000000045 /* MetalEngine.swift in Sources */,
 				A10000000000000000000047 /* NavigatorMetalView.swift in Sources */,

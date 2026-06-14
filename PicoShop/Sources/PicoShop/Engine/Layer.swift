@@ -55,11 +55,8 @@ struct Layer: Identifiable {
     var visible: Bool = true
     var locked: Bool = false
 
-    /// 表示用キャッシュ（buffer 変更時に refreshCache() で更新）
-    var cachedImage: CGImage?
-
     /// ピクセル内容の世代番号（GPU テクスチャの再アップロード判定用）。
-    /// buffer を書き換えたら refreshCache() で更新すること。
+    /// buffer を書き換えたら markContentChanged() で更新すること。
     private(set) var contentVersion: UInt64 = nextLayerContentVersion()
 
     init(name: String, buffer: PixelBuffer, offsetX: Int = 0, offsetY: Int = 0) {
@@ -68,11 +65,9 @@ struct Layer: Identifiable {
         self.buffer = buffer
         self.offsetX = offsetX
         self.offsetY = offsetY
-        self.cachedImage = buffer.makeCGImage()
     }
 
-    mutating func refreshCache() {
-        cachedImage = buffer.makeCGImage()
+    mutating func markContentChanged() {
         contentVersion = nextLayerContentVersion()
     }
 
@@ -82,9 +77,11 @@ struct Layer: Identifiable {
     }
 }
 
-// MARK: - 合成エンジン
+// MARK: - CPU 合成エンジン
 
-enum Compositor {
+/// ファイル出力・レイヤー統合などの編集処理用 CPU 合成。
+/// 画面表示は GPUCompositor / Metal renderer を使う。
+enum CPUCompositor {
 
     /// 表示レイヤーを bounds（キャンバス座標系の矩形）の範囲で合成する。
     /// 戻り値の画像サイズは bounds のサイズ。
@@ -99,9 +96,10 @@ enum Compositor {
               ) else { return nil }
         ctx.interpolationQuality = .none
 
-        // 下のレイヤー（配列の末尾）から順に描画
+        // 下のレイヤー（配列の末尾）から順に描画。
+        // 画面表示は Metal が担当するため、CPU 合成が必要なタイミングだけ CGImage 化する。
         for layer in layers.reversed() where layer.visible {
-            guard let img = layer.cachedImage else { continue }
+            guard let img = layer.buffer.makeCGImage() else { continue }
             ctx.setAlpha(CGFloat(layer.opacity / 100))
             ctx.setBlendMode(layer.blend.cgBlendMode)
             // top-left 座標系 → CG（y-up）座標系

@@ -100,18 +100,10 @@ final class LoupeRenderer: NSObject, MTKViewDelegate {
         // メイン画面倍率と合算：ルーペが常に主画面よりさらに拡大された状態になる
         let factor = CGFloat(model.loupeZoom) / 100 * model.zoom
         let p = cursorPos(model)
-        var viewU = ViewUniforms(viewSize: [Float(viewSize.width), Float(viewSize.height)])
+        let quad = MetalQuadEncoder(engine: engine, encoder: enc, viewSize: viewSize)
 
         // 背景チェッカー
-        var checkerVerts = MetalEngine.quadVertices(
-            rect: CGRect(origin: .zero, size: viewSize), uvRect: .zero)
-        var checker = CheckerUniforms(origin: .zero, tile: 8,
-                                      colorA: [1, 1, 1, 1], colorB: [0.82, 0.82, 0.82, 1])
-        enc.setRenderPipelineState(engine.checkerPipeline)
-        enc.setVertexBytes(&checkerVerts, length: MemoryLayout<QuadVertexIn>.stride * checkerVerts.count, index: 0)
-        enc.setVertexBytes(&viewU, length: MemoryLayout<ViewUniforms>.stride, index: 1)
-        enc.setFragmentBytes(&checker, length: MemoryLayout<CheckerUniforms>.stride, index: 0)
-        enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: checkerVerts.count)
+        quad.drawCheckerboard(rect: CGRect(origin: .zero, size: viewSize), origin: .zero)
 
         // カーソル周辺の拡大像（uv が [0,1] を超えた部分は border=透明 → チェッカーが見える）
         if let texture = model.gpuCompositor?.compositeTexture {
@@ -125,16 +117,8 @@ final class LoupeRenderer: NSObject, MTKViewDelegate {
                 width: cropW / texW,
                 height: cropH / texH
             )
-            var verts = MetalEngine.quadVertices(rect: CGRect(origin: .zero, size: viewSize),
-                                                 uvRect: uvRect)
-            var alpha: Float = 1
-            enc.setRenderPipelineState(engine.quadPipeline)
-            enc.setVertexBytes(&verts, length: MemoryLayout<QuadVertexIn>.stride * verts.count, index: 0)
-            enc.setVertexBytes(&viewU, length: MemoryLayout<ViewUniforms>.stride, index: 1)
-            enc.setFragmentBytes(&alpha, length: MemoryLayout<Float>.stride, index: 0)
-            enc.setFragmentTexture(texture, index: 0)
-            enc.setFragmentSamplerState(engine.nearestBorderSampler, index: 0)
-            enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: verts.count)
+            quad.drawTexture(texture, rect: CGRect(origin: .zero, size: viewSize),
+                             uvRect: uvRect, sampler: engine.nearestBorderSampler)
         }
 
         // グリッド・十字マーカー（色情報は SwiftUI の LoupeInfoBar に移行）
