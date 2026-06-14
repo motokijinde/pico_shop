@@ -61,6 +61,7 @@ struct FloatingPanelManager<Content: View>: NSViewRepresentable {
                         defaultSize: defaultSize
                     )
                 }
+                panel?.title = title
                 if let p = panel, !p.isVisible, window.isOnActiveSpace {
                     let onScreen = NSScreen.screens.contains { $0.visibleFrame.intersects(p.frame) }
                     if !onScreen {

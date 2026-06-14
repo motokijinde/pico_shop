@@ -13,8 +13,8 @@ extension CanvasRenderer {
     func encodeComposite(_ enc: MTLRenderCommandEncoder, model: AppModel, viewSize: CGSize) {
         guard let engine, let texture = model.gpuCompositor?.compositeTexture else { return }
 
-        // B&Wマスクプレビューモード（色域選択ツール）
-        if model.colorRangePreviewOn {
+        // B&Wマスクプレビューモード（全選択ツール共通）
+        if model.bwPreviewOn {
             updateMaskTexture(model: model, engine: engine)
             let cw = model.canvasWidth, ch = model.canvasHeight
             guard cw > 0, ch > 0 else { return }

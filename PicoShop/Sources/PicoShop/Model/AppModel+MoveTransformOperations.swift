@@ -82,6 +82,7 @@ extension AppModel {
                     return
                 }
                 self.isMoveExtracting = false
+                self.pushUndo("移動")
                 self.layers[idx].buffer = clearedBuf
                 self.layers[idx].markContentChanged()
                 self.originalMoveBuffer = floatBuf
@@ -105,16 +106,18 @@ extension AppModel {
     }
 
     /// 確定：floatingLayer をキャンバスクリップしてアクティブレイヤーに書き込む
-    func commitMoveTransform() {
+    func commitMoveTransform(completion: (() -> Void)? = nil) {
         guard originalMoveBounds != nil else { return }
         guard let fl = floatingLayer, let bounds = originalMoveBounds else {
             cleanupMoveTransform()
             beginMoveTransform()
+            completion?()
             return
         }
         guard let idx = activeLayerIndex else {
             cleanupMoveTransform()
             beginMoveTransform()
+            completion?()
             return
         }
         guard !layers[idx].locked else {
@@ -122,8 +125,6 @@ extension AppModel {
             NSSound.beep()
             return
         }
-
-        pushUndo("移動")
 
         // バックグラウンドに渡す値をキャプチャしてから、すぐに状態をクリア（二重コミット防止）
         let layerBuf    = layers[idx].buffer
@@ -164,6 +165,7 @@ extension AppModel {
                 self.selection = newSel
                 self.recomposite()
                 self.beginMoveTransform()  // 確定後も move ツールが継続できるよう即再初期化
+                completion?()
             }
         }
     }

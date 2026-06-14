@@ -135,6 +135,13 @@ extension AppModel {
     }
 
     func pasteFromPasteboard() {
+        if floatingLayer != nil {
+            commitMoveTransform { [weak self] in
+                self?.pasteFromPasteboard()
+            }
+            return
+        }
+
         let pb = NSPasteboard.general
         guard let img = NSImage(pasteboard: pb),
               let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil),
@@ -147,6 +154,7 @@ extension AppModel {
             return
         }
         pushUndo("ペースト")
+        var pastedRect: CGRect?
         // アクティブレイヤーへの貼り付け：レイヤー左上に合成
         let ok = withActiveLayer { l in
             guard let base = l.buffer.makeCGImage(), let overlay = pasted.makeCGImage() else { return }
@@ -164,8 +172,18 @@ extension AppModel {
                 l.buffer = newBuf
                 l.markContentChanged()
             }
+            pastedRect = CGRect(x: CGFloat(l.offsetX), y: CGFloat(l.offsetY),
+                                width: CGFloat(pasted.width), height: CGFloat(pasted.height))
         }
-        if ok { recomposite() } else { discardLastUndo() }
+        if ok {
+            if let pastedRect {
+                selection = SelectionMask.rect(width: canvasWidth, height: canvasHeight, rect: pastedRect)
+                tool = .move
+            }
+            recomposite()
+        } else {
+            discardLastUndo()
+        }
     }
 
     // MARK: スポイト

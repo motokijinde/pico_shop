@@ -75,14 +75,6 @@ struct PicoShopApp: App {
                 Button("選択をクリア") { model.clearSelection() }
                     .keyboardShortcut("a", modifiers: [.command, .shift])
                 Divider()
-                Button("選択範囲を拡大（\(model.lastGrowShrinkAmount)px）") {
-                    model.growSelection(by: model.lastGrowShrinkAmount)
-                }
-                Button("選択範囲を縮小（\(model.lastGrowShrinkAmount)px）") {
-                    model.shrinkSelection(by: model.lastGrowShrinkAmount)
-                }
-                Button("選択範囲を変更...") { model.showModifySelectionDialog = true }
-                Divider()
                 Button("選択範囲でクロップ") { model.cropToSelection() }
                     .disabled(model.selection == nil)
             }

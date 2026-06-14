@@ -9,6 +9,7 @@ struct RectSelectOptionsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SelectionModeButtons()
+            SelectionCommonActionsView()
 
             OptionSection(title: "矩形選択") {
                 Text("キャンバス上をドラッグして矩形を選択します")
@@ -33,6 +34,7 @@ struct FreehandSelectOptionsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SelectionModeButtons()
+            SelectionCommonActionsView()
 
             OptionSection(title: "フリーハンド選択") {
                 Text("キャンバス上をドラッグして\n自由な形で選択します")
@@ -51,9 +53,10 @@ struct ColorRangeSelectOptionsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SelectionModeButtons()
+            SelectionCommonActionsView()
 
             OptionSection(title: "色域選択") {
-                sliderRow(label: "Level",
+                sliderRow(label: "レベル",
                           value: $model.colorRangeOpts.level,
                           range: 1...100)
                 sliderRow(label: "境界調整",
@@ -66,7 +69,7 @@ struct ColorRangeSelectOptionsView: View {
                     .controlSize(.small)
 
                 HStack(spacing: 6) {
-                    Button("Reset") {
+                    Button("リセット") {
                         model.colorRangeOpts.level = 30
                         model.colorRangeOpts.boundaryAdjust = 0
                     }
@@ -77,16 +80,6 @@ struct ColorRangeSelectOptionsView: View {
                         .disabled(model.colorRangeLastPoint == nil)
 
                     Spacer()
-
-                    if model.colorRangePreviewOn {
-                        Button("プレビュー中") { model.colorRangePreviewOn.toggle() }
-                            .controlSize(.small)
-                            .buttonStyle(.borderedProminent)
-                    } else {
-                        Button("B&Wプレビュー") { model.colorRangePreviewOn.toggle() }
-                            .controlSize(.small)
-                            .buttonStyle(.bordered)
-                    }
                 }
 
                 Text("ヒント: キャンバスをクリックすると\nその色で選択を実行します")
@@ -125,17 +118,21 @@ struct MaskBrushOptionsView: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
-        OptionSection(title: "マスクブラシ") {
-            Picker("", selection: $model.brushOpts.add) {
-                Text("追加").tag(true)
-                Text("削除").tag(false)
-            }
-            .pickerStyle(.segmented)
-            .controlSize(.small)
+        VStack(alignment: .leading, spacing: 8) {
+            SelectionCommonActionsView()
 
-            sliderRow("サイズ",    $model.brushOpts.size,     1...100, "px")
-            sliderRow("硬さ",      $model.brushOpts.hardness,  0...100, "%")
-            sliderRow("不透明度",  $model.brushOpts.opacity,   0...100, "%")
+            OptionSection(title: "マスクブラシ") {
+                Picker("", selection: $model.brushOpts.add) {
+                    Text("追加").tag(true)
+                    Text("削除").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .controlSize(.small)
+
+                sliderRow("サイズ",    $model.brushOpts.size,     1...100, "px")
+                sliderRow("硬さ",      $model.brushOpts.hardness,  0...100, "%")
+                sliderRow("不透明度",  $model.brushOpts.opacity,   0...100, "%")
+            }
         }
     }
 
@@ -151,5 +148,49 @@ struct MaskBrushOptionsView: View {
                 .font(.caption2.monospacedDigit())
                 .frame(width: 36, alignment: .trailing)
         }
+    }
+}
+
+// MARK: - 選択範囲 共通操作
+
+struct SelectionCommonActionsView: View {
+    @EnvironmentObject var model: AppModel
+    @State private var pixelsText = "8"
+
+    private var hasSelection: Bool { model.selection != nil }
+
+    var body: some View {
+        OptionSection(title: "選択範囲") {
+            HStack(spacing: 6) {
+                NumberField(label: "px", text: $pixelsText, width: 44, labelWidth: 22) {
+                    commitPixels()
+                }
+                Button("拡大") { model.growSelection(by: pixelAmount) }
+                    .disabled(!hasSelection)
+                Button("縮小") { model.shrinkSelection(by: pixelAmount) }
+                    .disabled(!hasSelection)
+            }
+            .controlSize(.small)
+
+            HStack(spacing: 6) {
+                Button("反転") { model.invertSelection() }
+                    .disabled(!hasSelection)
+                Button("クリア") { model.clearSelection() }
+                    .disabled(!hasSelection)
+                Button("クロップ") { model.cropToSelection() }
+                    .disabled(!hasSelection)
+            }
+            .controlSize(.small)
+        }
+        .onAppear { pixelsText = String(model.lastGrowShrinkAmount) }
+    }
+
+    private var pixelAmount: Int {
+        max(1, Int(pixelsText) ?? model.lastGrowShrinkAmount)
+    }
+
+    private func commitPixels() {
+        model.lastGrowShrinkAmount = pixelAmount
+        pixelsText = String(pixelAmount)
     }
 }

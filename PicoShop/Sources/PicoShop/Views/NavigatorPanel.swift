@@ -36,9 +36,6 @@ struct NavigatorPanel: View {
             .frame(maxHeight: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 4))
 
-            Text("Zoom: \(Int((model.zoom * 100).rounded()))%")
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
         }
         .padding(8)
     }

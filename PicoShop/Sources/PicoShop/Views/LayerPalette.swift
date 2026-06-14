@@ -14,17 +14,11 @@ struct LayerPalette: View {
                     .font(.caption.bold())
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button { model.addEmptyLayer() } label: { Image(systemName: "plus") }
-                    .help("新規レイヤー")
-                Button { model.deleteActiveLayer() } label: { Image(systemName: "trash") }
-                    .help("レイヤーを削除")
-                Button { model.moveActiveLayer(up: true) } label: { Image(systemName: "arrowtriangle.up") }
-                    .help("上へ移動")
-                Button { model.moveActiveLayer(up: false) } label: { Image(systemName: "arrowtriangle.down") }
-                    .help("下へ移動")
+                LayerIconButton(systemImage: "plus", help: "新規レイヤー") { model.addEmptyLayer() }
+                LayerIconButton(systemImage: "trash", help: "レイヤーを削除") { model.deleteActiveLayer() }
+                LayerIconButton(systemImage: "arrowtriangle.up", help: "上へ移動") { model.moveActiveLayer(up: true) }
+                LayerIconButton(systemImage: "arrowtriangle.down", help: "下へ移動") { model.moveActiveLayer(up: false) }
             }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
 
             ScrollViewReader { proxy in
                 List {
@@ -56,32 +50,24 @@ struct LayerPalette: View {
     private func layerRow(_ layer: Layer) -> some View {
         HStack(spacing: 5) {
             // 表示/非表示
-            Button {
+            LayerIconButton(systemImage: layer.visible ? "eye" : "eye.slash",
+                            help: "表示/非表示",
+                            foreground: layer.visible ? .primary : .secondary) {
                 model.updateLayer(layer.id) { $0.visible.toggle() }
-            } label: {
-                Image(systemName: layer.visible ? "eye" : "eye.slash")
-                    .font(.system(size: 10))
-                    .foregroundStyle(layer.visible ? Color.primary : Color.secondary)
             }
-            .buttonStyle(.plain)
-            .help("表示/非表示")
 
             // ロック
-            Button {
+            LayerIconButton(systemImage: layer.locked ? "lock.fill" : "lock.open",
+                            help: "ロック",
+                            foreground: layer.locked ? .orange : .secondary) {
                 model.updateLayer(layer.id) { $0.locked.toggle() }
-            } label: {
-                Image(systemName: layer.locked ? "lock.fill" : "lock.open")
-                    .font(.system(size: 10))
-                    .foregroundStyle(layer.locked ? Color.orange : Color.secondary)
             }
-            .buttonStyle(.plain)
-            .help("ロック")
 
             // サムネイル（48×48）
             LayerThumbnailMetalView(layer: layer)
                 .frame(width: 48, height: 48)
-            .clipShape(RoundedRectangle(cornerRadius: 3))
-            .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.secondary.opacity(0.3)))
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+                .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.secondary.opacity(0.3)))
 
             // 名前（ダブルクリックで編集）
             if renamingID == layer.id {
@@ -112,19 +98,50 @@ struct LayerPalette: View {
         .contentShape(Rectangle())
         .onTapGesture { model.activeLayerID = layer.id }
         .contextMenu {
-            Button("名前を変更") {
+            Button {
                 renameText = layer.name
                 renamingID = layer.id
+            } label: {
+                Label("名前を変更", systemImage: "pencil")
             }
-            Button("複製") {
+            Button {
                 model.activeLayerID = layer.id
                 model.duplicateActiveLayer()
+            } label: {
+                Label("複製", systemImage: "doc.on.doc")
             }
-            Button("削除") {
+            Button {
                 model.activeLayerID = layer.id
                 model.deleteActiveLayer()
+            } label: {
+                Label("削除", systemImage: "trash")
             }
         }
     }
 }
 
+private struct LayerIconButton: View {
+    let systemImage: String
+    let help: String
+    var foreground: Color = .primary
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(foreground)
+                .frame(width: 22, height: 22)
+                .background(
+                    hovering ? Color.accentColor.opacity(0.16) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 4)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .onHover { hovering = $0 }
+    }
+}

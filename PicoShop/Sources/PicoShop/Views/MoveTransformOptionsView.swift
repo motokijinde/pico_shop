@@ -22,16 +22,16 @@ struct MoveTransformPanel: View {
                     .foregroundStyle(.secondary)
 
                 HStack(spacing: 6) {
-                    NumberField(label: "幅", text: $wText, width: 48) { commitSize(.width) }
-                    NumberField(label: "高さ", text: $hText, width: 48) { commitSize(.height) }
+                    NumberField(label: "幅", text: $wText, width: 48, labelWidth: 24) { commitSize(.width) }
+                    NumberField(label: "高さ", text: $hText, width: 48, labelWidth: 24) { commitSize(.height) }
                 }
                 HStack(spacing: 6) {
-                    NumberField(label: "W%", text: $wPctText, width: 48) { commitPercent(.width) }
-                    NumberField(label: "H%", text: $hPctText, width: 48) { commitPercent(.height) }
+                    NumberField(label: "W%", text: $wPctText, width: 48, labelWidth: 24) { commitPercent(.width) }
+                    NumberField(label: "H%", text: $hPctText, width: 48, labelWidth: 24) { commitPercent(.height) }
                 }
                 HStack(spacing: 6) {
-                    NumberField(label: "X", text: $xText, width: 48) { commitPosition() }
-                    NumberField(label: "Y", text: $yText, width: 48) { commitPosition() }
+                    NumberField(label: "X", text: $xText, width: 48, labelWidth: 24) { commitPosition() }
+                    NumberField(label: "Y", text: $yText, width: 48, labelWidth: 24) { commitPosition() }
                 }
                 NumberField(label: "回転(°)", text: $rotText, width: 48) { commitRotation() }
                 Toggle("アスペクト比維持", isOn: $model.transformKeepAspect)
@@ -40,7 +40,7 @@ struct MoveTransformPanel: View {
 
                 HStack(spacing: 4) {
                     Button("確定") { model.commitMoveTransform() }
-                        .disabled(model.originalMoveBounds == nil)
+                        .disabled(model.floatingLayer == nil)
                     Button("リセット") { model.resetMoveTransform() }
                         .disabled(model.pendingTransform.isIdentity)
                 }

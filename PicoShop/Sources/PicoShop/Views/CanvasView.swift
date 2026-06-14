@@ -56,6 +56,32 @@ struct CanvasView: View {
                 }
             }
             .gesture(canvasDrag)
+            .contextMenu {
+                Button { model.cutSelection() } label: {
+                    Label("カット", systemImage: "scissors")
+                }
+                    .disabled(model.selection == nil)
+                Button { model.copySelectionToPasteboard() } label: {
+                    Label("コピー", systemImage: "doc.on.doc")
+                }
+                    .disabled(model.selection == nil)
+                Button { model.pasteFromPasteboard() } label: {
+                    Label("ペースト", systemImage: "doc.on.clipboard")
+                }
+                Divider()
+                Button { model.invertSelection() } label: {
+                    Label("選択を反転", systemImage: "circle.lefthalf.filled")
+                }
+                    .disabled(model.selection == nil)
+                Button { model.clearSelection() } label: {
+                    Label("選択をクリア", systemImage: "xmark.circle")
+                }
+                    .disabled(model.selection == nil)
+                Button { model.cropToSelection() } label: {
+                    Label("選択範囲でクロップ", systemImage: "crop")
+                }
+                    .disabled(model.selection == nil)
+            }
             .simultaneousGesture(
                 MagnificationGesture()
                     .updating($pinchDelta) { v, s, _ in s = v }

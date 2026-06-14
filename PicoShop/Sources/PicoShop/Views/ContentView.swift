@@ -54,7 +54,6 @@ struct ContentView: View {
         )
         .sheet(isPresented: $model.showNewFileDialog) { NewFileDialog() }
         .sheet(isPresented: $model.showCanvasSizeDialog) { CanvasSizeDialog() }
-        .sheet(isPresented: $model.showModifySelectionDialog) { ModifySelectionDialog() }
         .sheet(isPresented: $model.showExportDialog) { ExportDialog() }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             handleDrop(providers)
@@ -144,6 +143,17 @@ struct ToolbarView: View {
 
             Divider().frame(height: 16)
 
+            Button {
+                model.bwPreviewOn.toggle()
+            } label: {
+                Text(model.bwPreviewOn ? "B&W中" : "B&W")
+                    .frame(width: 48)
+            }
+            .disabled(model.selection == nil)
+            .help("選択範囲のB&Wプレビュー")
+
+            Divider().frame(height: 16)
+
             Spacer()
 
             if let msg = model.statusMessage {
@@ -172,7 +182,7 @@ struct StatusBarView: View {
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            statusLine(canvasLabel: "キャンバス", zoomLabel: "Zoom", selLabel: "選択", noneLabel: "なし")
+            statusLine(canvasLabel: "キャンバス", zoomLabel: "ズーム", selLabel: "選択", noneLabel: "なし")
             statusLine(canvasLabel: "K", zoomLabel: "Z", selLabel: "S", noneLabel: nil)
         }
         .padding(.horizontal, 10)
