@@ -21,8 +21,6 @@ struct ContentView: View {
                     SidePanelView()
                         .frame(width: 200)
                 }
-                Divider()
-                StatusBarView()
             }
         }
         // ルーペ・ナビゲーター・レイヤーを NSPanel として管理
@@ -39,8 +37,8 @@ struct ContentView: View {
                     isVisible: $model.showNavigatorPanel,
                     title: "ナビゲーター",
                     autosaveName: "NavigatorPanel",
-                    minSize: NSSize(width: 160, height: 140),
-                    defaultSize: NSSize(width: 200, height: 180)
+                    minSize: NSSize(width: 210, height: 170),
+                    defaultSize: NSSize(width: 220, height: 220)
                 ) { NavigatorPanel().environmentObject(model) }
                 FloatingPanelManager(
                     isVisible: $model.showLayersPanel,
@@ -86,17 +84,9 @@ struct ContentView: View {
 
 struct ToolbarView: View {
     @EnvironmentObject var model: AppModel
-    @State private var zoomText = ""
-    @State private var editingZoom = false
 
     var body: some View {
         HStack(spacing: 8) {
-            Button("新規") { model.showNewFileDialog = true }
-            Button("開く") { model.openFileDialog() }
-            Button("保存") { model.saveProject() }
-
-            Divider().frame(height: 16)
-
             Button {
                 model.undo()
             } label: { Image(systemName: "arrow.uturn.backward") }
@@ -107,39 +97,6 @@ struct ToolbarView: View {
             } label: { Image(systemName: "arrow.uturn.forward") }
                 .disabled(model.redoStack.isEmpty)
                 .help("リドゥ")
-
-            Divider().frame(height: 16)
-
-            if editingZoom {
-                TextField("", text: $zoomText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 56)
-                    .onSubmit {
-                        if let v = Double(zoomText.replacingOccurrences(of: "%", with: "")) {
-                            model.setZoom(v / 100)
-                        }
-                        editingZoom = false
-                    }
-            } else {
-                Button {
-                    zoomText = String(Int((model.zoom * 100).rounded()))
-                    editingZoom = true
-                } label: {
-                    Text("\(Int((model.zoom * 100).rounded()))%")
-                        .font(.callout.monospacedDigit())
-                        .frame(width: 52)
-                }
-                .help("ズーム率を直接入力")
-            }
-
-            Button {
-                model.zoomOut()
-            } label: { Image(systemName: "minus.magnifyingglass") }.help("ズームアウト")
-            Button {
-                model.zoomIn()
-            } label: { Image(systemName: "plus.magnifyingglass") }.help("ズームイン")
-            Button("全体") { model.fitToView() }.help("全体表示")
-            Button("1:1") { model.zoomActualSize() }.help("等倍表示")
 
             Divider().frame(height: 16)
 
@@ -167,65 +124,6 @@ struct ToolbarView: View {
         .controlSize(.small)
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-    }
-}
-
-// MARK: - ステータスバー（仕様 13）
-
-struct StatusBarView: View {
-    @EnvironmentObject var model: AppModel
-
-    private var selectionText: String? {
-        guard let b = model.selectionBounds else { return nil }
-        return "\(Int(b.width))×\(Int(b.height))"
-    }
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            statusLine(canvasLabel: "キャンバス", zoomLabel: "ズーム", selLabel: "選択", noneLabel: "なし")
-            statusLine(canvasLabel: "K", zoomLabel: "Z", selLabel: "S", noneLabel: nil)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 3)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .windowBackgroundColor))
-    }
-
-    private func statusLine(canvasLabel: String, zoomLabel: String,
-                            selLabel: String, noneLabel: String?) -> some View {
-        HStack(spacing: 6) {
-            Text("\(canvasLabel): \(String(model.canvasWidth))×\(String(model.canvasHeight))")
-            Text("|").foregroundStyle(.tertiary)
-            // マウス座標は高頻度更新なので HoverState だけを観測する小ビューに分離
-            MouseCoordText(hover: model.hover)
-            Text("|").foregroundStyle(.tertiary)
-            Text("\(zoomLabel): \(Int((model.zoom * 100).rounded()))%")
-            if let sel = selectionText {
-                Text("|").foregroundStyle(.tertiary)
-                Text("\(selLabel): \(sel)")
-            } else if let none = noneLabel {
-                Text("|").foregroundStyle(.tertiary)
-                Text("\(selLabel): \(none)")
-            }
-            Spacer(minLength: 0)
-        }
-        .font(.caption.monospacedDigit())
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-    }
-}
-
-// MARK: - マウス座標表示（HoverState のみ観測）
-
-private struct MouseCoordText: View {
-    @ObservedObject var hover: HoverState
-
-    var body: some View {
-        if let p = hover.mouseCanvasPos {
-            Text("X: \(Int(p.x.rounded(.down))) Y: \(Int(p.y.rounded(.down)))")
-        } else {
-            Text("X: - Y: -")
-        }
     }
 }
 

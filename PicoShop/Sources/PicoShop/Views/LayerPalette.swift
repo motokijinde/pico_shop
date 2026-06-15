@@ -9,15 +9,20 @@ struct LayerPalette: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
+            HStack(spacing: 0) {
                 Text("レイヤー")
                     .font(.caption.bold())
                     .foregroundStyle(.secondary)
-                Spacer()
-                LayerIconButton(systemImage: "plus", help: "新規レイヤー") { model.addEmptyLayer() }
-                LayerIconButton(systemImage: "trash", help: "レイヤーを削除") { model.deleteActiveLayer() }
-                LayerIconButton(systemImage: "arrowtriangle.up", help: "上へ移動") { model.moveActiveLayer(up: true) }
-                LayerIconButton(systemImage: "arrowtriangle.down", help: "下へ移動") { model.moveActiveLayer(up: false) }
+                Spacer(minLength: 4)
+                HStack(spacing: 1) {
+                    LayerIconButton(systemImage: "plus.square", help: "新規レイヤー") { model.addEmptyLayer() }
+                    LayerIconButton(systemImage: "photo.badge.plus", help: "ファイルから読み込み") { model.addLayerFromFile() }
+                    LayerIconButton(systemImage: "plus.square.on.square", help: "レイヤーを複製") { model.duplicateActiveLayer() }
+                    LayerIconButton(systemImage: "trash", help: "レイヤーを削除") { model.deleteActiveLayer() }
+                    LayerIconButton(systemImage: "square.stack.3d.down.right", help: "レイヤーを統合") { model.mergeVisibleLayers() }
+                    LayerIconButton(systemImage: "arrowtriangle.up", help: "上へ移動") { model.moveActiveLayer(up: true) }
+                    LayerIconButton(systemImage: "arrowtriangle.down", help: "下へ移動") { model.moveActiveLayer(up: false) }
+                }
             }
 
             ScrollViewReader { proxy in
@@ -135,7 +140,7 @@ private struct LayerIconButton: View {
                 .foregroundStyle(foreground)
                 .frame(width: 22, height: 22)
                 .background(
-                    hovering ? Color.accentColor.opacity(0.16) : Color.clear,
+                    hovering ? Color.secondary.opacity(0.18) : Color.clear,
                     in: RoundedRectangle(cornerRadius: 4)
                 )
                 .contentShape(Rectangle())

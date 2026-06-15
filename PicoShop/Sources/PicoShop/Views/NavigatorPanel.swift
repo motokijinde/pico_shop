@@ -2,13 +2,32 @@ import SwiftUI
 
 // MARK: - ナビゲーターパネル（仕様 5-0）
 
+private struct NavButton: View {
+    let systemName: String
+    let help: String
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .frame(width: 24, height: 22)
+                .background(
+                    isHovered ? Color.secondary.opacity(0.18) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 4)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(help)
+    }
+}
+
 struct NavigatorPanel: View {
     @EnvironmentObject var model: AppModel
 
-    private let thumbHeight: CGFloat = 110
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("ナビゲーター")
                 .font(.caption.bold())
                 .foregroundStyle(.secondary)
@@ -36,6 +55,27 @@ struct NavigatorPanel: View {
             .frame(maxHeight: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 4))
 
+            Divider()
+
+            HStack(spacing: 0) {
+                HStack(spacing: 2) {
+                    NavButton(systemName: "minus.magnifyingglass", help: "ズームアウト") { model.zoomOut() }
+
+                    Text(String(format: "%d%%", Int((model.zoom * 100).rounded())))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.primary)
+                        .frame(minWidth: 46, alignment: .center)
+
+                    NavButton(systemName: "plus.magnifyingglass", help: "ズームイン") { model.zoomIn() }
+                }
+
+                Spacer()
+
+                HStack(spacing: 4) {
+                    NavButton(systemName: "arrow.down.right.and.arrow.up.left", help: "全体表示") { model.fitToView() }
+                    NavButton(systemName: "1.square", help: "等倍表示") { model.zoomActualSize() }
+                }
+            }
         }
         .padding(8)
     }
