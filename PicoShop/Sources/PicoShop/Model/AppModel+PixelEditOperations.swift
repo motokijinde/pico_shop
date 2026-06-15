@@ -20,9 +20,15 @@ extension AppModel {
                 for x in 0..<l.buffer.width {
                     let v = sel.value(x: x + l.offsetX, y: cy)
                     guard v > 0 else { continue }
-                    let i = (y * l.buffer.width + x) * 4 + 3
+                    let i = (y * l.buffer.width + x) * 4
                     // ソフトエッジ対応：マスク値ぶんアルファを減らす
-                    l.buffer.pixels[i] = UInt8(Int(l.buffer.pixels[i]) * (255 - Int(v)) / 255)
+                    let nextAlpha = UInt8(Int(l.buffer.pixels[i + 3]) * (255 - Int(v)) / 255)
+                    l.buffer.pixels[i + 3] = nextAlpha
+                    if nextAlpha == 0 {
+                        l.buffer.pixels[i] = 0
+                        l.buffer.pixels[i + 1] = 0
+                        l.buffer.pixels[i + 2] = 0
+                    }
                 }
             }
             l.markContentChanged()

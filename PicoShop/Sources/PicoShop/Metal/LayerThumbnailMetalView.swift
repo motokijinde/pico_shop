@@ -50,23 +50,38 @@ final class LayerThumbnailRenderer: NSObject, MTKViewDelegate {
               let cmd = engine.queue.makeCommandBuffer() else { return }
 
         if textureStore == nil { textureStore = LayerTextureStore(device: engine.device) }
+        let bg = NSColor.controlBackgroundColor.usingColorSpace(.sRGB) ?? .darkGray
+        rpd.colorAttachments[0].loadAction = .clear
+        rpd.colorAttachments[0].storeAction = .store
+        rpd.colorAttachments[0].clearColor = MTLClearColor(red: Double(bg.redComponent),
+                                                           green: Double(bg.greenComponent),
+                                                           blue: Double(bg.blueComponent),
+                                                           alpha: 1)
         guard let texture = textureStore?.texture(for: layer),
               let enc = cmd.makeRenderCommandEncoder(descriptor: rpd) else { return }
 
         let viewSize = view.bounds.size
         let quad = MetalQuadEncoder(engine: engine, encoder: enc, viewSize: viewSize)
-        quad.drawCheckerboard(rect: CGRect(origin: .zero, size: viewSize), origin: .zero, tile: 4)
 
         let scale = min(viewSize.width / max(1, CGFloat(layer.buffer.width)),
                         viewSize.height / max(1, CGFloat(layer.buffer.height)))
-        let size = CGSize(width: CGFloat(layer.buffer.width) * scale,
-                          height: CGFloat(layer.buffer.height) * scale)
-        let origin = CGPoint(x: (viewSize.width - size.width) / 2,
-                             y: (viewSize.height - size.height) / 2)
-        quad.drawTexture(texture,
-                         rect: CGRect(origin: origin, size: size),
-                         uvRect: CGRect(x: 0, y: 0, width: 1, height: 1),
-                         sampler: engine.nearestClampSampler)
+        let rawSize = CGSize(width: CGFloat(layer.buffer.width) * scale,
+                             height: CGFloat(layer.buffer.height) * scale)
+        let backingScale = view.window?.backingScaleFactor
+            ?? view.layer?.contentsScale
+            ?? NSScreen.main?.backingScaleFactor
+            ?? 1
+        let size = CGSize(width: max(1 / backingScale, (rawSize.width * backingScale).rounded() / backingScale),
+                          height: max(1 / backingScale, (rawSize.height * backingScale).rounded() / backingScale))
+        let origin = CGPoint(x: (((viewSize.width - size.width) / 2) * backingScale).rounded() / backingScale,
+                             y: (((viewSize.height - size.height) / 2) * backingScale).rounded() / backingScale)
+        let imageRect = CGRect(origin: origin, size: size)
+        quad.drawCheckerboard(rect: imageRect, origin: [Float(imageRect.minX), Float(imageRect.minY)], tile: 4)
+        let vertices = MetalEngine.quadVertices(rect: imageRect,
+                                                uvRect: CGRect(x: 0, y: 0, width: 1, height: 1))
+        quad.drawPremultipliedTextureInView(texture,
+                                            vertices: vertices,
+                                            sampler: engine.nearestClampSampler)
         enc.endEncoding()
         cmd.present(drawable)
         cmd.commit()

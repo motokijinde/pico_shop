@@ -49,7 +49,11 @@ enum PixelTransformEngine {
                 let ly = cy - layerOffsetY
                 guard lx >= 0, lx < cleared.width,
                       ly >= 0, ly < cleared.height else { continue }
-                cleared.pixels[(ly * cleared.width + lx) * 4 + 3] = 0
+                let i = (ly * cleared.width + lx) * 4
+                cleared.pixels[i] = 0
+                cleared.pixels[i + 1] = 0
+                cleared.pixels[i + 2] = 0
+                cleared.pixels[i + 3] = 0
             }
         }
         return cleared

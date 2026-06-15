@@ -61,6 +61,9 @@ extension AppModel {
                         extracted.pixels[dst + 1] = snapshot.pixels[src + 1]
                         extracted.pixels[dst + 2] = snapshot.pixels[src + 2]
                         extracted.pixels[dst + 3] = snapshot.pixels[src + 3]
+                        cleared.pixels[src]       = 0
+                        cleared.pixels[src + 1]   = 0
+                        cleared.pixels[src + 2]   = 0
                         cleared.pixels[src + 3]   = 0
                     }
                 }
