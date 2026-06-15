@@ -226,17 +226,4 @@ struct PixelBuffer {
         return result
     }
 
-    func opaqueBounds() -> (x: Int, y: Int, w: Int, h: Int)? {
-        var minX = width, maxX = -1, minY = height, maxY = -1
-        for y in 0..<height {
-            for x in 0..<width where pixels[(y * width + x) * 4 + 3] > 0 {
-                if x < minX { minX = x }
-                if x > maxX { maxX = x }
-                if y < minY { minY = y }
-                if y > maxY { maxY = y }
-            }
-        }
-        guard maxX >= minX, maxY >= minY else { return nil }
-        return (minX, minY, maxX - minX + 1, maxY - minY + 1)
-    }
 }

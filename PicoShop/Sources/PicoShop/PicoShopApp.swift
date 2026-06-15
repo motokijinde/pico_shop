@@ -2,6 +2,10 @@ import SwiftUI
 import AppKit
 
 private class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSWindow.allowsAutomaticWindowTabbing = false
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
 
@@ -20,18 +24,28 @@ struct PicoShopApp: App {
         .commands {
             // MARK: ファイル
             CommandGroup(replacing: .newItem) {
-                Button("新規...") { model.showNewFileDialog = true }
+                Button { model.showNewFileDialog = true } label: {
+                    Label("新規...", systemImage: "doc.badge.plus")
+                }
                     .keyboardShortcut("n", modifiers: .command)
-                Button("開く...") { model.openFileDialog() }
+                Button { model.openFileDialog() } label: {
+                    Label("開く...", systemImage: "folder")
+                }
                     .keyboardShortcut("o", modifiers: .command)
             }
             CommandGroup(replacing: .saveItem) {
-                Button("保存") { model.saveProject() }
+                Button { model.saveProject() } label: {
+                    Label("保存", systemImage: "square.and.arrow.down")
+                }
                     .keyboardShortcut("s", modifiers: .command)
-                Button("別名で保存...") { model.saveProject(forceDialog: true) }
+                Button { model.saveProject(forceDialog: true) } label: {
+                    Label("別名で保存...", systemImage: "square.and.arrow.down.on.square")
+                }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
                 Divider()
-                Button("エクスポート...") { model.showExportDialog = true }
+                Button { model.showExportDialog = true } label: {
+                    Label("エクスポート...", systemImage: "square.and.arrow.up")
+                }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
             }
 
@@ -39,80 +53,126 @@ struct PicoShopApp: App {
             CommandGroup(replacing: .undoRedo) { }
             CommandGroup(replacing: .pasteboard) { }
             CommandMenu("編集") {
-                Button("アンドゥ\(model.undoLabel.map { " \($0)" } ?? "")") { model.undo() }
+                Button { model.undo() } label: {
+                    Label("アンドゥ\(model.undoLabel.map { " \($0)" } ?? "")", systemImage: "arrow.uturn.backward")
+                }
                     .keyboardShortcut("z", modifiers: .command)
                     .disabled(model.undoStack.isEmpty)
-                Button("リドゥ\(model.redoLabel.map { " \($0)" } ?? "")") { model.redo() }
+                Button { model.redo() } label: {
+                    Label("リドゥ\(model.redoLabel.map { " \($0)" } ?? "")", systemImage: "arrow.uturn.forward")
+                }
                     .keyboardShortcut("z", modifiers: [.command, .shift])
                     .disabled(model.redoStack.isEmpty)
                 Divider()
-                Button("カット") { model.cutSelection() }
+                Button { model.cutSelection() } label: {
+                    Label("カット", systemImage: "scissors")
+                }
                     .keyboardShortcut("x", modifiers: .command)
-                Button("コピー") { model.copySelectionToPasteboard() }
+                    .disabled(model.selection == nil)
+                Button { model.copySelectionToPasteboard() } label: {
+                    Label("コピー", systemImage: "doc.on.doc")
+                }
                     .keyboardShortcut("c", modifiers: .command)
-                Button("ペースト") { model.pasteFromPasteboard() }
+                    .disabled(model.selection == nil)
+                Button { model.pasteFromPasteboard() } label: {
+                    Label("ペースト", systemImage: "doc.on.clipboard")
+                }
                     .keyboardShortcut("v", modifiers: .command)
                 Divider()
-                Menu("反転") {
-                    Button("水平反転") { model.flip(horizontal: true) }
-                    Button("垂直反転") { model.flip(horizontal: false) }
+                Menu {
+                    Button { model.flip(horizontal: true) } label: {
+                        Label("水平反転", systemImage: "arrow.left.and.right")
+                    }
+                    Button { model.flip(horizontal: false) } label: {
+                        Label("垂直反転", systemImage: "arrow.up.and.down")
+                    }
+                } label: {
+                    Label("反転", systemImage: "arrow.left.and.right")
                 }
             }
 
             // MARK: キャンバス
             CommandMenu("キャンバス") {
-                Button("キャンバスサイズ...") { model.showCanvasSizeDialog = true }
-                Button("キャンバスを画像に合わせる") { model.fitCanvasToLayers() }
-                Button("キャンバスを透明でクリア") { model.clearActiveLayerTransparent() }
+                Button { model.showCanvasSizeDialog = true } label: {
+                    Label("キャンバスサイズ...", systemImage: "rectangle")
+                }
+                Button { model.fitCanvasToLayers() } label: {
+                    Label("キャンバスを画像に合わせる", systemImage: "arrow.down.right.and.arrow.up.left")
+                }
+                Button { model.clearActiveLayerTransparent() } label: {
+                    Label("キャンバスを透明でクリア", systemImage: "eraser")
+                }
             }
 
             // MARK: 選択
             CommandMenu("選択") {
-                Button("すべてを選択") { model.selectAll() }
+                Button { model.selectAll() } label: {
+                    Label("すべてを選択", systemImage: "circle.dashed")
+                }
                     .keyboardShortcut("a", modifiers: .command)
-                Button("選択を反転") { model.invertSelection() }
+                Button { model.invertSelection() } label: {
+                    Label("選択を反転", systemImage: "circle.lefthalf.filled")
+                }
                     .keyboardShortcut("i", modifiers: .command)
-                Button("選択をクリア") { model.clearSelection() }
+                    .disabled(model.selection == nil)
+                Button { model.clearSelection() } label: {
+                    Label("選択をクリア", systemImage: "xmark.circle")
+                }
                     .keyboardShortcut("a", modifiers: [.command, .shift])
-                Divider()
-                Button("選択範囲でクロップ") { model.cropToSelection() }
                     .disabled(model.selection == nil)
             }
 
             // MARK: レイヤー
             CommandMenu("レイヤー") {
-                Button("新規レイヤー") { model.addEmptyLayer() }
+                Button { model.addEmptyLayer() } label: {
+                    Label("新規レイヤー", systemImage: "plus.square")
+                }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
-                Button("ファイルから読み込み...") { model.addLayerFromFile() }
-                Button("レイヤーを削除") { model.deleteActiveLayer() }
-                Button("レイヤーを複製") { model.duplicateActiveLayer() }
+                Button { model.addLayerFromFile() } label: {
+                    Label("ファイルから読み込み...", systemImage: "photo.badge.plus")
+                }
+                Button { model.deleteActiveLayer() } label: {
+                    Label("レイヤーを削除", systemImage: "trash")
+                }
+                Button { model.duplicateActiveLayer() } label: {
+                    Label("レイヤーを複製", systemImage: "plus.square.on.square")
+                }
                     .keyboardShortcut("j", modifiers: .command)
                 Divider()
-                Button("レイヤーを統合") { model.mergeVisibleLayers() }
+                Button { model.mergeVisibleLayers() } label: {
+                    Label("レイヤーを統合", systemImage: "square.stack.3d.down.right")
+                }
                     .keyboardShortcut("e", modifiers: .command)
-                Divider()
-                Button("透明部分をトリム") { model.trimActiveLayer() }
-                    .disabled(model.activeLayer == nil)
             }
 
             // MARK: ウィンドウ
             CommandGroup(after: .windowArrangement) {
                 Divider()
-                Button(model.showLoupe ? "ルーペを隠す" : "ルーペを表示") {
+                Button {
                     model.showLoupe.toggle()
+                } label: {
+                    Label(model.showLoupe ? "ルーペを隠す" : "ルーペを表示", systemImage: "magnifyingglass")
                 }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
-                Button(model.showNavigatorPanel ? "ナビゲーターを隠す" : "ナビゲーターを表示") {
+                Button {
                     model.showNavigatorPanel.toggle()
+                } label: {
+                    Label(model.showNavigatorPanel ? "ナビゲーターを隠す" : "ナビゲーターを表示", systemImage: "map")
                 }
-                Button(model.showLayersPanel ? "レイヤーを隠す" : "レイヤーを表示") {
+                Button {
                     model.showLayersPanel.toggle()
+                } label: {
+                    Label(model.showLayersPanel ? "レイヤーを隠す" : "レイヤーを表示", systemImage: "square.stack.3d.up")
                 }
-                Button(model.showOptionsPanel ? "オプションを隠す" : "オプションを表示") {
+                Button {
                     model.showOptionsPanel.toggle()
+                } label: {
+                    Label(model.showOptionsPanel ? "オプションを隠す" : "オプションを表示", systemImage: "slider.horizontal.3")
                 }
-                Button(model.showToolbar ? "ツールバーを隠す" : "ツールバーを表示") {
+                Button {
                     model.showToolbar.toggle()
+                } label: {
+                    Label(model.showToolbar ? "ツールバーを隠す" : "ツールバーを表示", systemImage: "wrench.and.screwdriver")
                 }
             }
         }

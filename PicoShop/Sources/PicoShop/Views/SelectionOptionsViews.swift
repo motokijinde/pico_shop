@@ -177,8 +177,6 @@ struct SelectionCommonActionsView: View {
                     .disabled(!hasSelection)
                 Button("クリア") { model.clearSelection() }
                     .disabled(!hasSelection)
-                Button("クロップ") { model.cropToSelection() }
-                    .disabled(!hasSelection)
             }
             .controlSize(.small)
         }

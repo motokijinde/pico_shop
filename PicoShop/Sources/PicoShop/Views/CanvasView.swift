@@ -69,6 +69,9 @@ struct CanvasView: View {
                     Label("ペースト", systemImage: "doc.on.clipboard")
                 }
                 Divider()
+                Button { model.selectAll() } label: {
+                    Label("すべてを選択", systemImage: "circle.dashed")
+                }
                 Button { model.invertSelection() } label: {
                     Label("選択を反転", systemImage: "circle.lefthalf.filled")
                 }
@@ -77,8 +80,8 @@ struct CanvasView: View {
                     Label("選択をクリア", systemImage: "xmark.circle")
                 }
                     .disabled(model.selection == nil)
-                Button { model.cropToSelection() } label: {
-                    Label("選択範囲でクロップ", systemImage: "crop")
+                Button { model.cropActiveLayerToSelection() } label: {
+                    Label("選択範囲をクロップ", systemImage: "crop")
                 }
                     .disabled(model.selection == nil)
             }

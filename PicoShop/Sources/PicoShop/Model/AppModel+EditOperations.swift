@@ -6,7 +6,8 @@ extension AppModel {
 
     // MARK: クロップ
 
-    func cropToSelection() {
+    func cropActiveLayerToSelection() {
+        applySelectionTransform()
         guard let sel = selection, let b = sel.bounds() else {
             warn("選択範囲がありません")
             return
@@ -14,59 +15,20 @@ extension AppModel {
         let ox = Int(b.minX.rounded()), oy = Int(b.minY.rounded())
         let w = max(1, Int(b.width.rounded())), h = max(1, Int(b.height.rounded()))
 
-        pushUndo("選択範囲でクロップ")
-        for i in layers.indices {
-            let srcX = ox - layers[i].offsetX
-            let srcY = oy - layers[i].offsetY
-            layers[i].buffer  = layers[i].buffer.cropped(srcX: srcX, srcY: srcY, width: w, height: h)
-            layers[i].offsetX = 0
-            layers[i].offsetY = 0
-            layers[i].markContentChanged()
+        pushUndo("選択範囲をクロップ")
+        let ok = withActiveLayer { l in
+            let srcX = ox - l.offsetX
+            let srcY = oy - l.offsetY
+            l.buffer = l.buffer.cropped(srcX: srcX, srcY: srcY, width: w, height: h)
+            l.offsetX = ox
+            l.offsetY = oy
+            l.markContentChanged()
         }
-        canvasWidth  = w
-        canvasHeight = h
-
-        // 選択範囲を新キャンバス座標にずらして残す
-        var newSel = SelectionMask(width: w, height: h)
-        for y in 0..<h {
-            for x in 0..<w {
-                newSel.data[y * w + x] = sel.value(x: ox + x, y: oy + y)
-            }
+        if ok {
+            recomposite()
+        } else {
+            discardLastUndo()
         }
-        selection = newSel
-
-        recomposite()
-        fitToView()
-    }
-
-    func trimActiveLayer() {
-        guard let idx = activeLayerIndex,
-              let b = layers[idx].buffer.opaqueBounds() else {
-            warn("トリムできる不透明ピクセルがありません")
-            return
-        }
-        pushUndo("透明部分をトリム")
-        layers[idx].offsetX += b.x
-        layers[idx].offsetY += b.y
-        layers[idx].buffer   = layers[idx].buffer.cropped(srcX: b.x, srcY: b.y, width: b.w, height: b.h)
-        layers[idx].markContentChanged()
-
-        // トリム後に全表示レイヤーの frame でキャンバスもリサイズ
-        let visible = layers.filter { $0.visible }
-        if !visible.isEmpty {
-            var bounds = visible[0].frame
-            for l in visible.dropFirst() { bounds = bounds.union(l.frame) }
-            let ox = Int(bounds.minX.rounded(.down)), oy = Int(bounds.minY.rounded(.down))
-            for i in layers.indices {
-                layers[i].offsetX -= ox
-                layers[i].offsetY -= oy
-            }
-            canvasWidth  = max(1, Int(bounds.width.rounded(.up)))
-            canvasHeight = max(1, Int(bounds.height.rounded(.up)))
-        }
-
-        recomposite()
-        fitToView()
     }
 
     // MARK: テキスト

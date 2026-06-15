@@ -243,9 +243,9 @@ struct ToolPaletteView: View {
             }
             Spacer()
             Divider().padding(.horizontal, 6).padding(.bottom, 2)
-            PaletteToggleButton(systemImage: "magnifyingglass.circle", help: "ルーペ", isOn: $model.showLoupe)
+            PaletteToggleButton(systemImage: "magnifyingglass", help: "ルーペ", isOn: $model.showLoupe)
             PaletteToggleButton(systemImage: "map", help: "ナビゲーター", isOn: $model.showNavigatorPanel)
-            PaletteToggleButton(systemImage: "square.stack", help: "レイヤー", isOn: $model.showLayersPanel)
+            PaletteToggleButton(systemImage: "square.stack.3d.up", help: "レイヤー", isOn: $model.showLayersPanel)
             Divider().padding(.horizontal, 6).padding(.vertical, 2)
             RoundedRectangle(cornerRadius: 4)
                 .fill(Color(nsColor: model.foregroundColor.nsColor))
