@@ -17,38 +17,16 @@ struct ContentView: View {
                     Divider()
                     CanvasView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if model.showLoupe || model.showNavigatorPanel || model.showLayersPanel {
+                        Divider()
+                        InspectorPanel()
+                            .frame(width: 240)
+                    }
                 }
                 Divider()
                 StatusBarView(hover: model.hover)
             }
         }
-        // ルーペ・ナビゲーター・レイヤーを NSPanel として管理
-        .background(
-            ZStack {
-                FloatingPanelManager(
-                    isVisible: $model.showLoupe,
-                    title: "ルーペ",
-                    autosaveName: "LoupePanel",
-                    minSize: NSSize(width: 160, height: 216),
-                    defaultSize: NSSize(width: 200, height: 256)
-                ) { LoupePanelContent().environmentObject(model) }
-                FloatingPanelManager(
-                    isVisible: $model.showNavigatorPanel,
-                    title: "ナビゲーター",
-                    autosaveName: "NavigatorPanel",
-                    minSize: NSSize(width: 210, height: 170),
-                    defaultSize: NSSize(width: 220, height: 220)
-                ) { NavigatorPanel().environmentObject(model) }
-                FloatingPanelManager(
-                    isVisible: $model.showLayersPanel,
-                    title: "レイヤー",
-                    autosaveName: "LayerPanel",
-                    minSize: NSSize(width: 180, height: 200),
-                    defaultSize: NSSize(width: 220, height: 280)
-                ) { LayerPalette().environmentObject(model) }
-            }
-            .frame(width: 0, height: 0)
-        )
         .sheet(isPresented: $model.showNewFileDialog) { NewFileDialog() }
         .sheet(isPresented: $model.showCanvasSizeDialog) { CanvasSizeDialog() }
         .sheet(isPresented: $model.showExportDialog) { ExportDialog() }
@@ -79,6 +57,63 @@ struct ContentView: View {
             }
         }
         return found
+    }
+}
+
+// MARK: - 右インスペクタ
+
+private struct InspectorPanel: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if model.showLoupe {
+                InspectorSectionHeader(title: "ルーペ")
+                LoupePanelContent()
+                    .frame(height: 208)
+                if model.showNavigatorPanel || model.showLayersPanel {
+                    panelDivider
+                }
+            }
+
+            if model.showNavigatorPanel {
+                NavigatorPanel()
+                    .frame(height: 200)
+                if model.showLayersPanel {
+                    panelDivider
+                }
+            }
+
+            if model.showLayersPanel {
+                LayerPalette()
+                    .frame(maxHeight: .infinity)
+            } else {
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var panelDivider: some View {
+        Divider()
+            .padding(.vertical, 2)
+    }
+}
+
+private struct InspectorSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 8)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
     }
 }
 

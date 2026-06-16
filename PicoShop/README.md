@@ -26,7 +26,8 @@ PICOSHOP_OPEN=/path/to/image.png .build/debug/PicoShop
 - **編集**: カット（透明化）・塗りつぶし（選択範囲 / フローフィル）・リサイズ（Nearest/Bilinear/Bicubic/Lanczos）・回転・反転
 - **テキスト**: フォント/サイズ/太さ/色/アンチエイリアス/配置基準 9 点を指定してラスタライズ
 - **キーボード操作**: カーソルキーで 1px 移動、Shift+カーソルキーで 1px サイズ変更（レイヤー/選択モード切替対応）
-- **ルーペ**: メインウィンドウ内フローティングオーバーレイ、拡大率 1×/2×/4×/8×、座標/RGB/Hex 表示、ピクセルグリッド、2 段階サイズ切替・ドラッグ移動
+- **右インスペクタ**: ルーペ・ナビゲーター・レイヤーをメインウィンドウ右側に集約
+- **ルーペ**: 拡大率 1×/2×/4×/8×、座標/RGB/Hex 表示、ピクセルグリッド
 - **ナビゲーター**: サムネイル + 赤枠ドラッグで表示位置移動
 - **ファイル**: `.pic` プロジェクト保存（ZIP + manifest.json、レイヤー情報保持）、PNG/JPEG/TIFF エクスポート、PNG/JPEG/TIFF/BMP 読み込み（ドラッグ&ドロップ対応）
 - **アンドゥ/リドゥ**: 直近 50 操作（操作名つき）
@@ -51,9 +52,10 @@ Sources/PicoShop/
 └─ Views/                   # SwiftUI ビュー一式
     ├─ ContentView.swift    # レイアウト・ツールパレット・ステータスバー
     ├─ CanvasView.swift     # キャンバス描画・ドラッグ操作・カーソル制御
-    ├─ OptionsPanel.swift   # ツールごとのオプションパネル
-    ├─ SidePanel.swift      # レイヤーパネル・ナビゲーター・カラーパネル
-    ├─ LoupeWindow.swift    # ルーペオーバーレイ（クロップ描画）
+    ├─ *OptionsView.swift   # ツールごとのオプションパネル
+    ├─ LayerPalette.swift   # レイヤーパネル
+    ├─ NavigatorPanel.swift # ナビゲーター
+    ├─ LoupeWindow.swift    # ルーペ表示
     ├─ Helpers.swift        # NumberField・OptionSection・AnchorGrid
     └─ Dialogs.swift        # 各種ダイアログ
 ```

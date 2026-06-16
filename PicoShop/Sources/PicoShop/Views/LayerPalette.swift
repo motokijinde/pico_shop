@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - レイヤーパレット（仕様 5-1, 5-2）
 
@@ -6,33 +7,31 @@ struct LayerPalette: View {
     @EnvironmentObject var model: AppModel
     @State private var renamingID: UUID?
     @State private var renameText = ""
+    @State private var draggingLayerID: UUID?
+    @State private var dropTargetID: UUID?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 0) {
-                Text("レイヤー")
-                    .font(.caption.bold())
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 4)
-                HStack(spacing: 1) {
-                    LayerIconButton(systemImage: "plus.square", help: "新規レイヤー") { model.addEmptyLayer() }
-                    LayerIconButton(systemImage: "photo.badge.plus", help: "ファイルから読み込み") { model.addLayerFromFile() }
-                    LayerIconButton(systemImage: "plus.square.on.square", help: "レイヤーを複製") { model.duplicateActiveLayer() }
-                    LayerIconButton(systemImage: "trash", help: "レイヤーを削除") { model.deleteActiveLayer() }
-                    LayerIconButton(systemImage: "square.stack.3d.down.right", help: "レイヤーを統合") { model.mergeVisibleLayers() }
-                    LayerIconButton(systemImage: "arrowtriangle.up", help: "上へ移動") { model.moveActiveLayer(up: true) }
-                    LayerIconButton(systemImage: "arrowtriangle.down", help: "下へ移動") { model.moveActiveLayer(up: false) }
-                }
+        VStack(alignment: .leading, spacing: 6) {
+            Text("レイヤー")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 1) {
+                Spacer(minLength: 0)
+                LayerIconButton(systemImage: "plus.square", help: "新規レイヤー") { model.addEmptyLayer() }
+                LayerIconButton(systemImage: "photo.badge.plus", help: "ファイルから読み込み") { model.addLayerFromFile() }
+                LayerIconButton(systemImage: "plus.square.on.square", help: "レイヤーを複製") { model.duplicateActiveLayer() }
+                LayerIconButton(systemImage: "trash", help: "レイヤーを削除") { model.deleteActiveLayer() }
+                LayerIconButton(systemImage: "square.stack.3d.down.right", help: "レイヤーを統合") { model.mergeVisibleLayers() }
+                LayerIconButton(systemImage: "arrowtriangle.up", help: "前面へ") { model.moveActiveLayer(up: true) }
+                LayerIconButton(systemImage: "arrowtriangle.down", help: "背面へ") { model.moveActiveLayer(up: false) }
             }
 
             ScrollViewReader { proxy in
                 List {
                     ForEach(model.layers) { layer in
                         layerRow(layer)
-                            .listRowInsets(EdgeInsets(top: 2, leading: 2, bottom: 2, trailing: 2))
-                    }
-                    .onMove { from, to in
-                        model.reorderLayers(fromOffsets: from, toOffset: to)
+                            .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
                     }
                 }
                 .listStyle(.plain)
@@ -45,15 +44,38 @@ struct LayerPalette: View {
             }
 
             if let layer = model.activeLayer {
+                Divider()
                 LayerDetailView(layer: layer)
             }
         }
-        .padding(8)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 8)
+    }
+
+    /// ドラッグ方向に応じて挿入ラインを行の上端／下端どちらに出すか
+    /// （上へ動かす＝対象行の上、下へ動かす＝対象行の下。reorderLayers の挿入位置と一致）
+    private func insertionAlignment(_ layer: Layer) -> Alignment {
+        guard let dragID = draggingLayerID,
+              let from = model.layers.firstIndex(where: { $0.id == dragID }),
+              let to = model.layers.firstIndex(where: { $0.id == layer.id }) else { return .top }
+        return from > to ? .top : .bottom
     }
 
     @ViewBuilder
     private func layerRow(_ layer: Layer) -> some View {
         HStack(spacing: 5) {
+            // ドラッグハンドル（掴んで並び替え）
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 16, height: 44)
+                .contentShape(Rectangle())
+                .onDrag {
+                    draggingLayerID = layer.id
+                    return NSItemProvider(object: layer.id.uuidString as NSString)
+                }
+                .help("ドラッグで並び替え")
+
             // 表示/非表示
             LayerIconButton(systemImage: layer.visible ? "eye" : "eye.slash",
                             help: "表示/非表示",
@@ -100,8 +122,25 @@ struct LayerPalette: View {
             model.activeLayerID == layer.id ? Color.accentColor.opacity(0.2) : Color.clear,
             in: RoundedRectangle(cornerRadius: 4)
         )
+        .overlay(alignment: insertionAlignment(layer)) {
+            if dropTargetID == layer.id {
+                Capsule()
+                    .fill(Color.accentColor)
+                    .frame(height: 2)
+                    .padding(.horizontal, 2)
+            }
+        }
         .contentShape(Rectangle())
         .onTapGesture { model.activeLayerID = layer.id }
+        .onDrop(
+            of: [.text],
+            delegate: LayerRowDropDelegate(
+                targetID: layer.id,
+                draggingID: $draggingLayerID,
+                dropTargetID: $dropTargetID,
+                model: model
+            )
+        )
         .contextMenu {
             Button {
                 renameText = layer.name
@@ -122,6 +161,37 @@ struct LayerPalette: View {
                 Label("削除", systemImage: "trash")
             }
         }
+    }
+}
+
+private struct LayerRowDropDelegate: DropDelegate {
+    let targetID: UUID
+    @Binding var draggingID: UUID?
+    @Binding var dropTargetID: UUID?
+    let model: AppModel
+
+    // ドラッグ中: ドロップ先の行を目印としてハイライト
+    func dropEntered(info: DropInfo) {
+        guard let draggingID, draggingID != targetID else { return }
+        dropTargetID = targetID
+    }
+
+    func dropExited(info: DropInfo) {
+        if dropTargetID == targetID { dropTargetID = nil }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    // ドロップ確定時に 1 回だけ並び替え（Undo も 1 回）
+    func performDrop(info: DropInfo) -> Bool {
+        defer { draggingID = nil; dropTargetID = nil }
+        guard let draggingID, draggingID != targetID,
+              let from = model.layers.firstIndex(where: { $0.id == draggingID }),
+              let to = model.layers.firstIndex(where: { $0.id == targetID }) else { return false }
+        model.reorderLayers(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+        return true
     }
 }
 

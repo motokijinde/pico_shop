@@ -1,9 +1,14 @@
 import SwiftUI
 import AppKit
 
-private let loupeInfoBarH: CGFloat = 56
+private let loupeInfoBarH: CGFloat = 44
 private let loupeMinCanvasW: CGFloat  = 160   // ズームピッカーが収まる最小幅
 private let loupeMinCanvasH: CGFloat  = 160   // 最小時にキャンバスが正方形になる高さ
+
+private let loupeLabelGap: CGFloat  = 2   // ラベルと数値の間隔（全組で統一）
+private let loupeGroupGap: CGFloat  = 8   // R/G/B/A/X/Y 各組どうしの間隔（ラベル間隔より広め）
+private let loupeRGBValueW: CGFloat = 18  // RGBA 値の幅（最大3桁）
+private let loupeXYValueW: CGFloat  = 28  // XY 値の幅
 
 // MARK: - パネルコンテンツ
 
@@ -78,7 +83,7 @@ private struct LoupeToggleButton: View {
     }
 }
 
-// MARK: - カラー情報バー（3行：Hex / XY / RGBA）
+// MARK: - カラー情報バー（色 / 座標）
 
 private struct LoupeInfoBar: View {
     @EnvironmentObject var model: AppModel
@@ -93,9 +98,9 @@ private struct LoupeInfoBar: View {
         let py  = Int(pos.y.rounded(.down))
         let c   = sampledColor
 
-        VStack(alignment: .leading, spacing: 3) {
-            // Row 1: スウォッチ + Hex
-            HStack(spacing: 5) {
+        VStack(alignment: .leading, spacing: 4) {
+            // 1行目: 色見本 + HEX
+            HStack(spacing: 6) {
                 RoundedRectangle(cornerRadius: 3)
                     .fill(c.map { Color(nsColor: $0.nsColor) } ?? Color.secondary.opacity(0.15))
                     .frame(width: 16, height: 16)
@@ -103,21 +108,21 @@ private struct LoupeInfoBar: View {
                         RoundedRectangle(cornerRadius: 3)
                             .stroke(Color.secondary.opacity(0.4), lineWidth: 0.5)
                     )
+
                 Text(c?.hexString ?? "—")
-                    .font(.system(size: 9, weight: .medium).monospacedDigit())
+                    .font(.system(size: 10, weight: .medium).monospacedDigit())
             }
-            // Row 2: X/Y 座標
-            HStack(spacing: 0) {
-                coordView("X", px)
-                coordView("Y", py)
+
+            // 2行目: R G B A X Y
+            HStack(spacing: loupeGroupGap) {
+                fixedValue("R", c.map { String($0.r) } ?? "—", labelColor: .red, valueWidth: loupeRGBValueW)
+                fixedValue("G", c.map { String($0.g) } ?? "—", labelColor: Color(nsColor: .systemGreen), valueWidth: loupeRGBValueW)
+                fixedValue("B", c.map { String($0.b) } ?? "—", labelColor: .blue, valueWidth: loupeRGBValueW)
+                fixedValue("A", c.map { String($0.a) } ?? "—", labelColor: Color(nsColor: .tertiaryLabelColor), valueWidth: loupeRGBValueW)
+                fixedValue("X", String(px), labelColor: .secondary, valueWidth: loupeXYValueW)
+                fixedValue("Y", String(py), labelColor: .secondary, valueWidth: loupeXYValueW)
             }
-            // Row 3: RGBA（ラベルに色付け）
-            HStack(spacing: 0) {
-                channelView("R", c?.r, Color.red)
-                channelView("G", c?.g, Color(nsColor: .systemGreen))
-                channelView("B", c?.b, Color.blue)
-                channelView("A", c?.a, nil)
-            }
+            .lineLimit(1)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
@@ -140,23 +145,15 @@ private struct LoupeInfoBar: View {
         sampledColor = model.compositeColor(atCanvas: pos)
     }
 
-    private func coordView(_ label: String, _ value: Int) -> some View {
-        HStack(spacing: 1) {
-            Text(label).foregroundStyle(.secondary)
-            Text(":").foregroundStyle(.tertiary)
-            Text(String(value))
+    private func fixedValue(_ label: String, _ value: String, labelColor: Color, valueWidth: CGFloat) -> some View {
+        HStack(spacing: loupeLabelGap) {
+            Text(label)
+                .foregroundStyle(labelColor)
+                .frame(width: 9, alignment: .leading)
+            Text(value)
+                .foregroundStyle(.secondary)
+                .frame(width: valueWidth, alignment: .leading)
         }
-        .frame(width: 35, alignment: .leading)
-        .font(.system(size: 9).monospacedDigit())
-    }
-
-    private func channelView(_ label: String, _ value: UInt8?, _ color: Color?) -> some View {
-        HStack(spacing: 1) {
-            Text(label).foregroundColor(color ?? Color(nsColor: .tertiaryLabelColor))
-            Text(":").foregroundStyle(.tertiary)
-            Text(value.map { String($0) } ?? "—")
-        }
-        .frame(width: 35, alignment: .leading)
         .font(.system(size: 9).monospacedDigit())
     }
 }

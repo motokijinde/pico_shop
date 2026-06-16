@@ -14,7 +14,6 @@
 		A10000000000000000000021 /* AppModel+File.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000020 /* AppModel+File.swift */; };
 		A10000000000000000000023 /* CanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000022 /* CanvasView.swift */; };
 		A10000000000000000000025 /* LoupeWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000024 /* LoupeWindow.swift */; };
-		A1000000000000000000009D /* FloatingPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000009C /* FloatingPanel.swift */; };
 		A10000000000000000000027 /* Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000026 /* Helpers.swift */; };
 		A10000000000000000000029 /* Dialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000028 /* Dialogs.swift */; };
 		A1000000000000000000002B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* ContentView.swift */; };
@@ -54,7 +53,6 @@
 		A10000000000000000000074 /* CanvasDragHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000075 /* CanvasDragHandling.swift */; };
 		A10000000000000000000076 /* CanvasInteraction.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000077 /* CanvasInteraction.swift */; };
 		A10000000000000000000078 /* MoveTransformOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000079 /* MoveTransformOptionsView.swift */; };
-		A1000000000000000000007A /* LayerMoveOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000007B /* LayerMoveOptionsView.swift */; };
 		A1000000000000000000007C /* PixelTransformOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000007D /* PixelTransformOptionsView.swift */; };
 		A1000000000000000000007E /* CanvasImageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000007F /* CanvasImageRenderer.swift */; };
 		A10000000000000000000080 /* CanvasOverlaySceneBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000081 /* CanvasOverlaySceneBuilder.swift */; };
@@ -82,7 +80,6 @@
 		A10000000000000000000020 /* AppModel+File.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+File.swift"; sourceTree = "<group>"; };
 		A10000000000000000000022 /* CanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasView.swift; sourceTree = "<group>"; };
 		A10000000000000000000024 /* LoupeWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoupeWindow.swift; sourceTree = "<group>"; };
-		A1000000000000000000009C /* FloatingPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanel.swift; sourceTree = "<group>"; };
 		A10000000000000000000026 /* Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Helpers.swift; sourceTree = "<group>"; };
 		A10000000000000000000028 /* Dialogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dialogs.swift; sourceTree = "<group>"; };
 		A1000000000000000000002A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -122,7 +119,6 @@
 		A10000000000000000000075 /* CanvasDragHandling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasDragHandling.swift; sourceTree = "<group>"; };
 		A10000000000000000000077 /* CanvasInteraction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasInteraction.swift; sourceTree = "<group>"; };
 		A10000000000000000000079 /* MoveTransformOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveTransformOptionsView.swift; sourceTree = "<group>"; };
-		A1000000000000000000007B /* LayerMoveOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayerMoveOptionsView.swift; sourceTree = "<group>"; };
 		A1000000000000000000007D /* PixelTransformOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelTransformOptionsView.swift; sourceTree = "<group>"; };
 		A1000000000000000000007F /* CanvasImageRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasImageRenderer.swift; sourceTree = "<group>"; };
 		A10000000000000000000081 /* CanvasOverlaySceneBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasOverlaySceneBuilder.swift; sourceTree = "<group>"; };
@@ -256,14 +252,12 @@
 				A10000000000000000000077 /* CanvasInteraction.swift */,
 				A10000000000000000000073 /* CanvasCursors.swift */,
 				A10000000000000000000024 /* LoupeWindow.swift */,
-				A1000000000000000000009C /* FloatingPanel.swift */,
 				A10000000000000000000028 /* Dialogs.swift */,
 				A10000000000000000000026 /* Helpers.swift */,
 				A1000000000000000000005F /* SelectionOptionsViews.swift */,
 				A10000000000000000000061 /* TransformOptionsViews.swift */,
 				A10000000000000000000091 /* TransformFieldMath.swift */,
 				A10000000000000000000079 /* MoveTransformOptionsView.swift */,
-				A1000000000000000000007B /* LayerMoveOptionsView.swift */,
 				A1000000000000000000007D /* PixelTransformOptionsView.swift */,
 				A10000000000000000000063 /* EditOptionsViews.swift */,
 				A1000000000000000000008D /* LayerDetailView.swift */,
@@ -381,7 +375,6 @@
 				A10000000000000000000076 /* CanvasInteraction.swift in Sources */,
 				A10000000000000000000072 /* CanvasCursors.swift in Sources */,
 				A10000000000000000000025 /* LoupeWindow.swift in Sources */,
-				A1000000000000000000009D /* FloatingPanel.swift in Sources */,
 				A10000000000000000000027 /* Helpers.swift in Sources */,
 				A10000000000000000000029 /* Dialogs.swift in Sources */,
 				A1000000000000000000002B /* ContentView.swift in Sources */,
@@ -389,7 +382,6 @@
 				A10000000000000000000060 /* TransformOptionsViews.swift in Sources */,
 				A10000000000000000000090 /* TransformFieldMath.swift in Sources */,
 				A10000000000000000000078 /* MoveTransformOptionsView.swift in Sources */,
-				A1000000000000000000007A /* LayerMoveOptionsView.swift in Sources */,
 				A1000000000000000000007C /* PixelTransformOptionsView.swift in Sources */,
 				A10000000000000000000062 /* EditOptionsViews.swift in Sources */,
 				A1000000000000000000008C /* LayerDetailView.swift in Sources */,

@@ -1,5 +1,9 @@
 import SwiftUI
 
+private let detailLabelGap: CGFloat  = 2   // ラベルと数値の間隔（X/Y で統一）
+private let detailGroupGap: CGFloat  = 8   // X/Y 各組どうしの間隔（ラベル間隔より広め）
+private let detailXYValueW: CGFloat  = 40  // X/Y 値の幅
+
 // MARK: - レイヤー詳細（仕様 5-1）
 
 struct LayerDetailView: View {
@@ -15,12 +19,15 @@ struct LayerDetailView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            Text("画像サイズ: \(String(layer.buffer.width)) × \(String(layer.buffer.height)) px")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text("表示サイズ: \(String(layer.buffer.width)) × \(String(layer.buffer.height)) px")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            detailRow(label: "画像サイズ", value: "\(layer.buffer.width) × \(layer.buffer.height) px")
+            HStack(spacing: 6) {
+                detailLabel("位置")
+                HStack(spacing: detailGroupGap) {
+                    fixedValue("X", String(layer.offsetX), valueWidth: detailXYValueW)
+                    fixedValue("Y", String(layer.offsetY), valueWidth: detailXYValueW)
+                }
+            }
+            .lineLimit(1)
 
             Picker("合成", selection: Binding(
                 get: { layer.blend },
@@ -75,5 +82,36 @@ struct LayerDetailView: View {
     private func syncOffsets() {
         offsetXText = String(layer.offsetX)
         offsetYText = String(layer.offsetY)
+    }
+
+    private func detailRow(label: String, value: String) -> some View {
+        HStack(spacing: 6) {
+            detailLabel(label)
+            Text(value)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .font(.caption2.monospacedDigit())
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+    }
+
+    private func detailLabel(_ label: String) -> some View {
+        Text(label)
+            .foregroundStyle(.secondary)
+            .frame(width: 52, alignment: .leading)
+            .font(.caption2.monospacedDigit())
+    }
+
+    private func fixedValue(_ label: String, _ value: String, valueWidth: CGFloat) -> some View {
+        HStack(spacing: detailLabelGap) {
+            Text(label)
+                .foregroundStyle(.secondary)
+                .frame(width: 9, alignment: .leading)
+            Text(value)
+                .foregroundStyle(.secondary)
+                .frame(width: valueWidth, alignment: .leading)
+        }
+        .font(.caption2.monospacedDigit())
     }
 }
