@@ -37,14 +37,6 @@ struct MoveTransformPanel: View {
                 Toggle("アスペクト比維持", isOn: $model.transformKeepAspect)
                     .font(.caption)
                     .controlSize(.small)
-
-                HStack(spacing: 4) {
-                    Button("確定") { model.commitMoveTransform() }
-                        .disabled(model.floatingLayer == nil)
-                    Button("リセット") { model.resetMoveTransform() }
-                        .disabled(model.pendingTransform.isIdentity)
-                }
-                .controlSize(.small)
             } else {
                 Text("レイヤーがありません")
                     .font(.caption2)

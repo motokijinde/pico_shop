@@ -13,16 +13,14 @@ extension AppModel {
     func openFileDialog() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.png, .jpeg, .tiff, .bmp, AppModel.picType]
-        panel.allowsMultipleSelection = true
+        panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK else { return }
 
-        let picURLs = panel.urls.filter { $0.pathExtension.lowercased() == "pic" }
-        let imageURLs = panel.urls.filter { $0.pathExtension.lowercased() != "pic" }
-        if let pic = picURLs.first {
-            openProject(url: pic)
-        }
-        if !imageURLs.isEmpty {
-            openImageFiles(imageURLs)
+        guard let url = panel.url else { return }
+        if url.pathExtension.lowercased() == "pic" {
+            openProject(url: url)
+        } else {
+            openImageFileAsDocument(url)
         }
     }
 

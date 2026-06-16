@@ -165,11 +165,6 @@ struct PicoShopApp: App {
                     Label(model.showLayersPanel ? "レイヤーを隠す" : "レイヤーを表示", systemImage: "square.stack.3d.up")
                 }
                 Button {
-                    model.showOptionsPanel.toggle()
-                } label: {
-                    Label(model.showOptionsPanel ? "オプションを隠す" : "オプションを表示", systemImage: "slider.horizontal.3")
-                }
-                Button {
                     model.showToolbar.toggle()
                 } label: {
                     Label(model.showToolbar ? "ツールバーを隠す" : "ツールバーを表示", systemImage: "wrench.and.screwdriver")

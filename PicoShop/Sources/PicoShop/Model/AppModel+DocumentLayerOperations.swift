@@ -34,9 +34,13 @@ extension AppModel {
         fitToView()
     }
 
-    // MARK: 画像ファイルの読み込み（新規レイヤーとして追加）
+    // MARK: 画像ファイルを新規ドキュメントとして開く
 
-    /// 初回（レイヤーが空 or 全レイヤーが空白 1 枚のみ）ならキャンバスサイズを画像に合わせる
+    func openImageFileAsDocument(_ url: URL) {
+        openImageFiles([url])
+    }
+
+    /// 画像ファイルを現在の内容と置き換えて開く。複数渡された場合は 1 つの新規ドキュメント内のレイヤーにする。
     func openImageFiles(_ urls: [URL]) {
         if tool == .move, floatingLayer != nil {
             commitMoveTransform { [weak self] in
@@ -44,36 +48,49 @@ extension AppModel {
             }
             return
         }
-        var added = false
-        let pristine = isPristine  // pushUndo の前に判定（undoStack を見るため）
+
+        var loadedLayers: [Layer] = []
+        var firstSize: (width: Int, height: Int)?
+        var failedNames: [String] = []
+
         for url in urls {
             guard let img = NSImage(contentsOf: url),
                   let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil),
                   let buf = PixelBuffer(cgImage: cg) else {
-                warn("読み込めませんでした: \(url.lastPathComponent)")
+                failedNames.append(url.lastPathComponent)
                 continue
             }
-            if !added { pushUndo("ファイルを開く") }
-            if pristine && !added {
-                canvasWidth = buf.width
-                canvasHeight = buf.height
-                layers = []
+            if firstSize == nil {
+                firstSize = (buf.width, buf.height)
             }
             let layer = Layer(name: url.deletingPathExtension().lastPathComponent, buffer: buf)
-            layers.insert(layer, at: 0)
-            activeLayerID = layer.id
-            added = true
+            loadedLayers.append(layer)
         }
-        if added {
-            recomposite()
-            fitToView()
-        }
-    }
 
-    /// まだ何も編集していない初期状態か（空白レイヤー 1 枚のみ）
-    private var isPristine: Bool {
-        layers.count <= 1 && undoStack.isEmpty
-            && (layers.first?.buffer.pixels.allSatisfy { $0 == 0 } ?? true)
+        guard let firstSize, !loadedLayers.isEmpty else {
+            warn(failedNames.first.map { "読み込めませんでした: \($0)" } ?? "読み込める画像がありません")
+            return
+        }
+
+        pushUndo("ファイルを開く")
+        canvasWidth = firstSize.width
+        canvasHeight = firstSize.height
+        layers = loadedLayers
+        selection = nil
+        pendingTransform = SelectionTransform()
+        floatingLayer = nil
+        moveLayerID = nil
+        moveStartedWithSelection = false
+        originalMoveBuffer = nil
+        originalMoveBounds = nil
+        activeLayerID = loadedLayers.first?.id
+        projectURL = nil
+        recomposite()
+        fitToView()
+
+        if let name = failedNames.first {
+            warn("一部読み込めませんでした: \(name)")
+        }
     }
 
     // MARK: レイヤー操作

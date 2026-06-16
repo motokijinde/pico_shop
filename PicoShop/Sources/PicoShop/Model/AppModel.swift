@@ -105,7 +105,6 @@ final class AppModel: ObservableObject {
     @Published var showLoupe: Bool = UserDefaults.standard.bool(forKey: "loupeVisible") {
         didSet { UserDefaults.standard.set(showLoupe, forKey: "loupeVisible") }
     }
-    @Published var showOptionsPanel = true
     @Published var showNavigatorPanel: Bool = UserDefaults.standard.object(forKey: "navigatorPanelVisible") as? Bool ?? true {
         didSet { UserDefaults.standard.set(showNavigatorPanel, forKey: "navigatorPanelVisible") }
     }

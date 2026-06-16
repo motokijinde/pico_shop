@@ -14,9 +14,8 @@ extension AppModel {
         guard !urls.isEmpty else { return }
         if let pic = urls.first(where: { $0.pathExtension.lowercased() == "pic" }) {
             openProject(url: pic)
-        }
-        let images = urls.filter { $0.pathExtension.lowercased() != "pic" }
-        if !images.isEmpty {
+        } else {
+            let images = urls.filter { $0.pathExtension.lowercased() != "pic" }
             openImageFiles(images)
         }
     }

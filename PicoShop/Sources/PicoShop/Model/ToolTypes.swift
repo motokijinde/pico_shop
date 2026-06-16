@@ -58,11 +58,53 @@ enum Tool: String, CaseIterable, Identifiable {
         }
     }
 
+    var statusHelp: String {
+        switch self {
+        case .rectSelect:
+            return "矩形選択: キャンバス上をドラッグして矩形を選択します。Shift で縦横比固定、Option で中央基準です。"
+        case .freehandSelect:
+            return "フリーハンド選択: キャンバス上をドラッグして自由な形で選択します。"
+        case .colorRangeSelect:
+            return "色域選択: キャンバスをクリックして近い色を選択します。レベル、境界調整、隣接設定は上のバーで調整します。"
+        case .maskBrush:
+            return "マスクブラシ: 選択マスクをブラシで追加または削除します。"
+        case .selectionTransform:
+            return "選択変形: ハンドルをドラッグするか数値を入力して選択範囲を変形します。"
+        case .move:
+            return "移動: 選択範囲内のピクセル、または選択がない場合はレイヤー全体を移動します。"
+        case .layerMove:
+            return "レイヤー移動: 選択範囲に関わらずアクティブレイヤー全体を移動します。"
+        case .transform:
+            return "変形: 選択範囲内の画像、または選択がない場合はレイヤー全体を変形します。"
+        case .fill:
+            return "塗りつぶし: 選択範囲またはクリック位置から隣接色を塗りつぶします。"
+        case .resize:
+            return "リサイズ: 選択範囲、または選択がない場合はアクティブレイヤーをリサイズします。"
+        case .text:
+            return "テキスト: 内容、位置、サイズを指定してアクティブレイヤーへ描画します。"
+        case .rotate:
+            return "回転: 選択範囲、または選択がない場合はアクティブレイヤーを回転します。"
+        case .flip:
+            return "反転: 選択範囲、または選択がない場合はアクティブレイヤーを左右/上下反転します。"
+        case .eyedropper:
+            return "スポイト: キャンバスをクリックして前景色を取得します。"
+        }
+    }
+
     /// 選択系ツールか（矩形・フリーハンド・色域）
     var isSelectionTool: Bool {
         switch self {
         case .rectSelect, .freehandSelect, .colorRangeSelect: return true
         default: return false
+        }
+    }
+
+    var hasToolbarOptionsPopover: Bool {
+        switch self {
+        case .rectSelect, .freehandSelect, .colorRangeSelect, .layerMove, .eyedropper:
+            return false
+        default:
+            return true
         }
     }
 }

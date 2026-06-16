@@ -18,8 +18,6 @@
 		A10000000000000000000027 /* Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000026 /* Helpers.swift */; };
 		A10000000000000000000029 /* Dialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000028 /* Dialogs.swift */; };
 		A1000000000000000000002B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* ContentView.swift */; };
-		A1000000000000000000002D /* OptionsPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002C /* OptionsPanel.swift */; };
-		A1000000000000000000002F /* SidePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002E /* SidePanel.swift */; };
 		A10000000000000000000031 /* TextRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000030 /* TextRenderer.swift */; };
 		A10000000000000000000033 /* ColorRangeEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000032 /* ColorRangeEngine.swift */; };
 		A10000000000000000000035 /* SelectionMask.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000034 /* SelectionMask.swift */; };
@@ -88,8 +86,6 @@
 		A10000000000000000000026 /* Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Helpers.swift; sourceTree = "<group>"; };
 		A10000000000000000000028 /* Dialogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dialogs.swift; sourceTree = "<group>"; };
 		A1000000000000000000002A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		A1000000000000000000002C /* OptionsPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptionsPanel.swift; sourceTree = "<group>"; };
-		A1000000000000000000002E /* SidePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePanel.swift; sourceTree = "<group>"; };
 		A10000000000000000000030 /* TextRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextRenderer.swift; sourceTree = "<group>"; };
 		A10000000000000000000032 /* ColorRangeEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorRangeEngine.swift; sourceTree = "<group>"; };
 		A10000000000000000000034 /* SelectionMask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionMask.swift; sourceTree = "<group>"; };
@@ -263,7 +259,6 @@
 				A1000000000000000000009C /* FloatingPanel.swift */,
 				A10000000000000000000028 /* Dialogs.swift */,
 				A10000000000000000000026 /* Helpers.swift */,
-				A1000000000000000000002C /* OptionsPanel.swift */,
 				A1000000000000000000005F /* SelectionOptionsViews.swift */,
 				A10000000000000000000061 /* TransformOptionsViews.swift */,
 				A10000000000000000000091 /* TransformFieldMath.swift */,
@@ -271,7 +266,6 @@
 				A1000000000000000000007B /* LayerMoveOptionsView.swift */,
 				A1000000000000000000007D /* PixelTransformOptionsView.swift */,
 				A10000000000000000000063 /* EditOptionsViews.swift */,
-				A1000000000000000000002E /* SidePanel.swift */,
 				A1000000000000000000008D /* LayerDetailView.swift */,
 				A1000000000000000000008B /* LayerPalette.swift */,
 				A10000000000000000000089 /* NavigatorPanel.swift */,
@@ -391,7 +385,6 @@
 				A10000000000000000000027 /* Helpers.swift in Sources */,
 				A10000000000000000000029 /* Dialogs.swift in Sources */,
 				A1000000000000000000002B /* ContentView.swift in Sources */,
-				A1000000000000000000002D /* OptionsPanel.swift in Sources */,
 				A1000000000000000000005E /* SelectionOptionsViews.swift in Sources */,
 				A10000000000000000000060 /* TransformOptionsViews.swift in Sources */,
 				A10000000000000000000090 /* TransformFieldMath.swift in Sources */,
@@ -399,7 +392,6 @@
 				A1000000000000000000007A /* LayerMoveOptionsView.swift in Sources */,
 				A1000000000000000000007C /* PixelTransformOptionsView.swift in Sources */,
 				A10000000000000000000062 /* EditOptionsViews.swift in Sources */,
-				A1000000000000000000002F /* SidePanel.swift in Sources */,
 				A1000000000000000000008C /* LayerDetailView.swift in Sources */,
 				A1000000000000000000008A /* LayerPalette.swift in Sources */,
 				A10000000000000000000088 /* NavigatorPanel.swift in Sources */,

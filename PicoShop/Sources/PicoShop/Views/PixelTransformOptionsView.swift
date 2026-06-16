@@ -46,14 +46,6 @@ struct PixelTransformPanel: View {
                 Toggle("アスペクト比維持", isOn: $model.transformKeepAspect)
                     .font(.caption)
                     .controlSize(.small)
-
-                HStack(spacing: 4) {
-                    Button("適用") { model.applyPixelTransform() }
-                        .disabled(model.pendingTransform.isIdentity)
-                    Button("リセット") { model.resetSelectionTransform() }
-                        .disabled(model.pendingTransform.isIdentity)
-                }
-                .controlSize(.small)
             } else {
                 Text("レイヤーがありません")
                     .font(.caption2)

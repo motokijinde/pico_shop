@@ -90,6 +90,10 @@ struct CanvasView: View {
                     .updating($pinchDelta) { v, s, _ in s = v }
                     .onEnded { v in model.setZoom(model.zoom * v, around: lastHoverViewPoint) }
             )
+            .simultaneousGesture(
+                TapGesture(count: 2)
+                    .onEnded { commitTransformOnDoubleClick() }
+            )
             .onAppear {
                 model.viewSize = geo.size
                 installScrollMonitor()
@@ -97,6 +101,19 @@ struct CanvasView: View {
             }
             .onDisappear { removeScrollMonitor() }
             .onChange(of: geo.size) { _, s in model.viewSize = s }
+        }
+    }
+
+    private func commitTransformOnDoubleClick() {
+        switch model.tool {
+        case .move:
+            model.commitMoveTransform()
+        case .selectionTransform:
+            model.applySelectionTransform()
+        case .transform:
+            model.applyPixelTransform()
+        default:
+            break
         }
     }
 

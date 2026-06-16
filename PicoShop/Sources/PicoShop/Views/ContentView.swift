@@ -17,10 +17,9 @@ struct ContentView: View {
                     Divider()
                     CanvasView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    Divider()
-                    SidePanelView()
-                        .frame(width: 200)
                 }
+                Divider()
+                StatusBarView(hover: model.hover)
             }
         }
         // ルーペ・ナビゲーター・レイヤーを NSPanel として管理
@@ -73,8 +72,11 @@ struct ContentView: View {
         group.notify(queue: .main) {
             let images = urls.filter { ["png", "jpg", "jpeg", "tiff", "tif", "bmp"].contains($0.pathExtension.lowercased()) }
             let pics = urls.filter { $0.pathExtension.lowercased() == "pic" }
-            if let pic = pics.first { model.openProject(url: pic) }
-            if !images.isEmpty { model.openImageFiles(images) }
+            if let pic = pics.first {
+                model.openProject(url: pic)
+            } else if !images.isEmpty {
+                model.openImageFiles(images)
+            }
         }
         return found
     }
@@ -84,46 +86,303 @@ struct ContentView: View {
 
 struct ToolbarView: View {
     @EnvironmentObject var model: AppModel
+    @State private var growShrinkText = "8"
+    @State private var showingToolOptions = false
 
     var body: some View {
         HStack(spacing: 8) {
-            Button {
-                model.undo()
-            } label: { Image(systemName: "arrow.uturn.backward") }
-                .disabled(model.undoStack.isEmpty)
-                .help("アンドゥ")
-            Button {
-                model.redo()
-            } label: { Image(systemName: "arrow.uturn.forward") }
-                .disabled(model.redoStack.isEmpty)
-                .help("リドゥ")
+            Label(model.tool.displayName, systemImage: model.tool.systemImage)
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 116, alignment: .leading)
 
-            Divider().frame(height: 16)
+            Divider().frame(height: 18)
 
-            Button {
-                model.bwPreviewOn.toggle()
-            } label: {
-                Text(model.bwPreviewOn ? "B&W中" : "B&W")
-                    .frame(width: 48)
+            if model.tool.isSelectionTool {
+                SelectionModeButtons()
+                    .frame(width: 104)
+
+                Divider().frame(height: 18)
             }
-            .disabled(model.selection == nil)
-            .help("選択範囲のB&Wプレビュー")
 
-            Divider().frame(height: 16)
+            toolSpecificControls
+
+            transformCommitControls
+
+            if model.tool.hasToolbarOptionsPopover {
+                Button {
+                    showingToolOptions.toggle()
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                }
+                .help("\(model.tool.displayName)の詳細設定")
+                .popover(isPresented: $showingToolOptions, arrowEdge: .bottom) {
+                    ToolOptionsPopoverContent()
+                        .environmentObject(model)
+                        .padding(10)
+                        .frame(width: 220)
+                }
+            }
+
+            if model.selection != nil || model.tool.isSelectionTool || model.tool == .maskBrush || model.tool == .selectionTransform {
+                Divider().frame(height: 18)
+                selectionActions
+            }
 
             Spacer()
-
-            if let msg = model.statusMessage {
-                Text(msg)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .lineLimit(1)
-            }
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
         .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.vertical, 4)
+        .frame(height: 34)
+        .onAppear { growShrinkText = String(model.lastGrowShrinkAmount) }
+    }
+
+    @ViewBuilder
+    private var toolSpecificControls: some View {
+        switch model.tool {
+        case .rectSelect:
+            Toggle("比率", isOn: $model.rectSelKeepAspect)
+                .toggleStyle(.checkbox)
+                .controlSize(.small)
+                .help("アスペクト比維持")
+            Toggle("中央", isOn: $model.rectSelFromCenter)
+                .toggleStyle(.checkbox)
+                .controlSize(.small)
+                .help("中央から選択")
+        case .colorRangeSelect:
+            HStack(spacing: 4) {
+                Text("レベル")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Slider(value: $model.colorRangeOpts.level, in: 1...100)
+                    .frame(width: 104)
+                Text("\(Int(model.colorRangeOpts.level))")
+                    .font(.caption2.monospacedDigit())
+                    .frame(width: 24, alignment: .trailing)
+
+                Text("境界")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 4)
+                Slider(value: $model.colorRangeOpts.boundaryAdjust, in: -10...10)
+                    .frame(width: 96)
+                    .help("境界調整: 左で縮小、右で拡大")
+                Text("\(Int(model.colorRangeOpts.boundaryAdjust))")
+                    .font(.caption2.monospacedDigit())
+                    .frame(width: 24, alignment: .trailing)
+
+                Toggle("隣接", isOn: $model.colorRangeOpts.contiguous)
+                    .toggleStyle(.checkbox)
+                    .controlSize(.small)
+                Button("再実行") { model.retryColorRangeSelection() }
+                    .disabled(model.colorRangeLastPoint == nil)
+                Button("リセット") {
+                    model.colorRangeOpts.level = 30
+                    model.colorRangeOpts.boundaryAdjust = 0
+                }
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var transformCommitControls: some View {
+        switch model.tool {
+        case .move:
+            HStack(spacing: 4) {
+                Button { model.commitMoveTransform() } label: {
+                    Image(systemName: "checkmark")
+                }
+                .disabled(model.floatingLayer == nil)
+                .help("移動を確定")
+
+                Button { model.resetMoveTransform() } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                }
+                .disabled(model.pendingTransform.isIdentity)
+                .help("移動をリセット")
+            }
+        case .selectionTransform:
+            HStack(spacing: 4) {
+                Button { model.applySelectionTransform() } label: {
+                    Image(systemName: "checkmark")
+                }
+                .disabled(model.pendingTransform.isIdentity)
+                .help("選択変形を確定")
+
+                Button { model.resetSelectionTransform() } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                }
+                .disabled(model.pendingTransform.isIdentity)
+                .help("選択変形をリセット")
+            }
+        case .transform:
+            HStack(spacing: 4) {
+                Button { model.applyPixelTransform() } label: {
+                    Image(systemName: "checkmark")
+                }
+                .disabled(model.pendingTransform.isIdentity)
+                .help("変形を適用")
+
+                Button { model.resetSelectionTransform() } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                }
+                .disabled(model.pendingTransform.isIdentity)
+                .help("変形をリセット")
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    private var selectionActions: some View {
+        HStack(spacing: 6) {
+            Button {
+                model.bwPreviewOn.toggle()
+            } label: {
+                Image(systemName: "circle.righthalf.filled")
+                    .frame(width: 22)
+            }
+            .disabled(model.selection == nil)
+            .help(model.bwPreviewOn ? "B&Wマスクプレビューを解除" : "B&Wマスクプレビュー")
+
+            NumberField(label: "px", text: $growShrinkText, width: 42, labelWidth: 20) {
+                commitGrowShrinkPixels()
+            }
+
+            Button { model.growSelection(by: growShrinkPixels) } label: {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+            }
+            .disabled(model.selection == nil)
+            .help("選択範囲を拡大")
+
+            Button { model.shrinkSelection(by: growShrinkPixels) } label: {
+                Image(systemName: "arrow.down.right.and.arrow.up.left")
+            }
+            .disabled(model.selection == nil)
+            .help("選択範囲を縮小")
+
+            Button { model.invertSelection() } label: {
+                Image(systemName: "circle.lefthalf.filled")
+            }
+            .disabled(model.selection == nil)
+            .help("選択を反転")
+
+            Button { model.clearSelection() } label: {
+                Image(systemName: "xmark.circle")
+            }
+            .disabled(model.selection == nil)
+            .help("選択をクリア")
+        }
+        .frame(height: 24)
+    }
+
+    private var growShrinkPixels: Int {
+        max(1, Int(growShrinkText) ?? model.lastGrowShrinkAmount)
+    }
+
+    private func commitGrowShrinkPixels() {
+        model.lastGrowShrinkAmount = growShrinkPixels
+        growShrinkText = String(growShrinkPixels)
+    }
+}
+
+private struct ToolOptionsPopoverContent: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        switch model.tool {
+        case .maskBrush:
+            MaskBrushOptionsView()
+        case .selectionTransform:
+            SelectionTransformOptionsView()
+        case .move:
+            MoveTransformPanel()
+        case .transform:
+            TransformToolOptionsView()
+        case .fill:
+            FillToolOptions()
+        case .resize:
+            ResizeToolOptions()
+        case .text:
+            TextToolOptions()
+        case .rotate:
+            RotateToolOptions()
+        case .flip:
+            FlipToolOptions()
+        case .rectSelect, .freehandSelect, .colorRangeSelect, .layerMove, .eyedropper:
+            EmptyView()
+        }
+    }
+}
+
+// MARK: - 選択操作モードボタン（新規・追加・除外）
+
+struct SelectionModeButtons: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(SelectionOperationMode.allCases) { mode in
+                Button {
+                    model.selectionOperationMode = mode
+                } label: {
+                    Image(systemName: mode.systemImage)
+                        .font(.system(size: 13))
+                        .frame(width: 28, height: 24)
+                        .background(
+                            model.selectionOperationMode == mode
+                                ? Color.accentColor.opacity(0.3)
+                                : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 5)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help(mode.displayName)
+            }
+        }
+        .frame(height: 24)
+    }
+}
+
+// MARK: - ステータスバー
+
+struct StatusBarView: View {
+    @EnvironmentObject var model: AppModel
+    @ObservedObject var hover: HoverState
+
+    init(hover: HoverState) {
+        self.hover = hover
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(statusText)
+                .font(.caption)
+                .foregroundStyle(model.statusMessage == nil ? Color.secondary : Color.orange)
+                .lineLimit(1)
+
+            Spacer()
+
+            if let p = hover.mouseCanvasPos {
+                Text("X \(Int(p.x))  Y \(Int(p.y))")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+            Text("\(Int(model.zoom * 100))%")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 22)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var statusText: String {
+        model.statusMessage ?? model.tool.statusHelp
     }
 }
 
