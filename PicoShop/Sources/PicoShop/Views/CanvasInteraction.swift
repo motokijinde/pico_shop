@@ -64,7 +64,11 @@ extension CanvasView {
         case .selectionTransform, .transform, .move:
             updateTransformCursor()
         case .layerMove:
-            NSCursor.openHand.set()
+            if case .moveLayer = dragAction {
+                NSCursor.closedHand.set()
+            } else {
+                NSCursor.openHand.set()
+            }
         case .eyedropper, .fill:
             NSCursor.crosshair.set()
         default:

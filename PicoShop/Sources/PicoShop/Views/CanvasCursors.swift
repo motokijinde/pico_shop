@@ -18,31 +18,45 @@ extension CanvasView {
     /// ホットスポット：杖の先端（スパークル中心）
     static func makeWandCursor(badge: String? = nil) -> NSCursor {
         let size: CGFloat = 20
+        let sparkle = CGPoint(x: 6.5, y: 13.5)  // y-up: 左上のキラキラ中心
         let img = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-            // y-up 座標系（flipped: false）
-            // スティック: (3, 3) → (12, 12)  スパークル中心: (15, 15)
             ctx.setLineCap(.round); ctx.setLineJoin(.round)
 
-            func drawWand() {
-                // スティック
-                ctx.move(to: CGPoint(x: 3, y: 3))
-                ctx.addLine(to: CGPoint(x: 11, y: 11))
-                // スパークル（上下左右4本）
-                ctx.move(to: CGPoint(x: 15, y: 12)); ctx.addLine(to: CGPoint(x: 15, y: 18))
-                ctx.move(to: CGPoint(x: 12, y: 15)); ctx.addLine(to: CGPoint(x: 18, y: 15))
-                // スパークル（斜め2本）
-                ctx.move(to: CGPoint(x: 13, y: 17)); ctx.addLine(to: CGPoint(x: 17, y: 13))
-                ctx.move(to: CGPoint(x: 13, y: 13)); ctx.addLine(to: CGPoint(x: 17, y: 17))
+            let stickW: CGFloat = 1.8
+            let halo: CGFloat = 1.3
+
+            // 杖の柄（キラキラの右下から右下へ伸びる棒）
+            func stickPath() -> CGPath {
+                let p = CGMutablePath()
+                p.move(to: CGPoint(x: 9.5, y: 10.5))
+                p.addLine(to: CGPoint(x: 17, y: 3))
+                return p
+            }
+            // 4 点星（上下左右）
+            func starPath() -> CGPath {
+                let outerR: CGFloat = 5.6, innerR: CGFloat = 1.3
+                let p = CGMutablePath()
+                for i in 0..<8 {
+                    let r = (i % 2 == 0) ? outerR : innerR
+                    let ang = CGFloat(i) * .pi / 4
+                    let pt = CGPoint(x: sparkle.x + r * cos(ang), y: sparkle.y + r * sin(ang))
+                    i == 0 ? p.move(to: pt) : p.addLine(to: pt)
+                }
+                p.closeSubpath()
+                return p
             }
 
-            ctx.setLineWidth(2.5)
-            ctx.setStrokeColor(NSColor.white.cgColor)
-            drawWand(); ctx.strokePath()
+            // 白ハロー
+            ctx.addPath(stickPath()); ctx.setStrokeColor(NSColor.white.cgColor)
+            ctx.setLineWidth(stickW + 2 * halo); ctx.strokePath()
+            ctx.addPath(starPath()); ctx.setFillColor(NSColor.white.cgColor)
+            ctx.setStrokeColor(NSColor.white.cgColor); ctx.setLineWidth(2 * halo); ctx.drawPath(using: .fillStroke)
 
-            ctx.setLineWidth(1.5)
-            ctx.setStrokeColor(NSColor.black.cgColor)
-            drawWand(); ctx.strokePath()
+            // 黒本体
+            ctx.addPath(stickPath()); ctx.setStrokeColor(NSColor.black.cgColor)
+            ctx.setLineWidth(stickW); ctx.strokePath()
+            ctx.addPath(starPath()); ctx.setFillColor(NSColor.black.cgColor); ctx.fillPath()
 
             if let badge {
                 let attrs: [NSAttributedString.Key: Any] = [
@@ -57,8 +71,8 @@ extension CanvasView {
             return true
         }
         img.isTemplate = false
-        // ホットスポット: スパークル中心 (15, 15) y-up → 画面座標 (15, size-15) = (15, 5)
-        return NSCursor(image: img, hotSpot: NSPoint(x: 15, y: 5))
+        // ホットスポット: スパークル中心 (y-up) → 画面座標 (y-down)
+        return NSCursor(image: img, hotSpot: NSPoint(x: sparkle.x, y: size - sparkle.y))
     }
 
     static func makeSelectionCursor(badge: String? = nil) -> NSCursor {
@@ -66,7 +80,7 @@ extension CanvasView {
         let img = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
             let cx = size / 2, cy = size / 2
-            let gap: CGFloat = 4  // 中心の空白
+            let gap: CGFloat = 2  // 中心の空白
 
             ctx.setLineCap(.round)
 
@@ -105,43 +119,54 @@ extension CanvasView {
         return NSCursor(image: img, hotSpot: NSPoint(x: size / 2, y: size / 2))
     }
 
-    /// 回転カーソル：円弧 + 先端に矢印
+    /// 回転カーソル：滑らかな円弧 + 接線方向の矢印（時計回り ↻）
     static func makeRotateCursor() -> NSCursor {
         let size: CGFloat = 20
-        let img = NSImage(size: NSSize(width: size, height: size), flipped: true) { _ in
+        let img = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-            let cx = size / 2, cy = size / 2, r: CGFloat = 6.5
-            // y-down 座標: 0°=右, 90°=下, 180°=左, 270°=上
-            // 20°→340° の CW 円弧（ほぼ一周）
-            let startDeg: CGFloat = 20, endDeg: CGFloat = 340
-            func buildArc() {
-                let steps = 24
-                for i in 0...steps {
-                    let deg = startDeg + (endDeg - startDeg) * CGFloat(i) / CGFloat(steps)
-                    let rad = deg * .pi / 180
-                    let p = CGPoint(x: cx + r * cos(rad), y: cy + r * sin(rad))
-                    i == 0 ? ctx.move(to: p) : ctx.addLine(to: p)
-                }
-            }
-            ctx.setLineCap(.round); ctx.setLineJoin(.round)
-            ctx.setStrokeColor(NSColor.white.cgColor); ctx.setLineWidth(2.5)
-            buildArc(); ctx.strokePath()
-            ctx.setStrokeColor(NSColor.black.cgColor); ctx.setLineWidth(1.5)
-            buildArc(); ctx.strokePath()
+            let center = CGPoint(x: size / 2, y: size / 2)
+            let r: CGFloat = 6
+            let lineW: CGFloat = 2.0
+            let halo: CGFloat = 1.3
 
-            // 340° の位置に矢印（CW の接線方向 = 340° + 90° = 70°）
-            let endRad = endDeg * .pi / 180
-            let tip = CGPoint(x: cx + r * cos(endRad), y: cy + r * sin(endRad))
-            let tangent = endRad + .pi / 2
-            for (sz, col) in [(CGFloat(4.5), NSColor.white), (3.5, NSColor.black)] {
-                ctx.setFillColor(col.cgColor)
-                ctx.move(to: tip)
-                ctx.addLine(to: CGPoint(x: tip.x + sz * cos(tangent + 0.5),
-                                        y: tip.y + sz * sin(tangent + 0.5)))
-                ctx.addLine(to: CGPoint(x: tip.x + sz * cos(tangent - 0.5),
-                                        y: tip.y + sz * sin(tangent - 0.5)))
-                ctx.closePath(); ctx.fillPath()
+            // 上(90°)に隙間を空け、そこから時計回りにほぼ一周する円弧
+            let gapCenter: CGFloat = 90, gapHalf: CGFloat = 24
+            let d2r: (CGFloat) -> CGFloat = { $0 * .pi / 180 }
+            let endRad = d2r(gapCenter + gapHalf)             // 矢印を置く端
+            let startRad = d2r(gapCenter - gapHalf + 360)     // 反対の端（CW で一周）
+
+            // 円弧の端点・接線・半径方向から矢印を組み立て
+            let e = CGPoint(x: center.x + r * cos(endRad), y: center.y + r * sin(endRad))
+            let tangent = CGPoint(x: sin(endRad), y: -cos(endRad))   // CW の進行方向
+            let normal  = CGPoint(x: cos(endRad), y: sin(endRad))    // 半径方向
+            let arrowLen: CGFloat = 5.0, arrowHalf: CGFloat = 3.4
+
+            func arcPath() -> CGPath {
+                let p = CGMutablePath()
+                p.addArc(center: center, radius: r, startAngle: startRad, endAngle: endRad, clockwise: true)
+                return p
             }
+            func headPath() -> CGPath {
+                let p = CGMutablePath()
+                p.move(to: CGPoint(x: e.x + arrowLen * tangent.x, y: e.y + arrowLen * tangent.y))
+                p.addLine(to: CGPoint(x: e.x + arrowHalf * normal.x, y: e.y + arrowHalf * normal.y))
+                p.addLine(to: CGPoint(x: e.x - arrowHalf * normal.x, y: e.y - arrowHalf * normal.y))
+                p.closeSubpath()
+                return p
+            }
+
+            ctx.setLineCap(.round); ctx.setLineJoin(.round)
+
+            // 白ハロー
+            ctx.addPath(arcPath()); ctx.setStrokeColor(NSColor.white.cgColor)
+            ctx.setLineWidth(lineW + 2 * halo); ctx.strokePath()
+            ctx.addPath(headPath()); ctx.setFillColor(NSColor.white.cgColor)
+            ctx.setStrokeColor(NSColor.white.cgColor); ctx.setLineWidth(2 * halo); ctx.drawPath(using: .fillStroke)
+
+            // 黒本体
+            ctx.addPath(arcPath()); ctx.setStrokeColor(NSColor.black.cgColor)
+            ctx.setLineWidth(lineW); ctx.strokePath()
+            ctx.addPath(headPath()); ctx.setFillColor(NSColor.black.cgColor); ctx.fillPath()
             return true
         }
         return NSCursor(image: img, hotSpot: NSPoint(x: size / 2, y: size / 2))
@@ -152,34 +177,49 @@ extension CanvasView {
         let size: CGFloat = 20
         let img = NSImage(size: NSSize(width: size, height: size), flipped: true) { _ in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-            let m: CGFloat = 3
-            // flipped:true (y-down): (m,m)=左上, (size-m,size-m)=右下
-            let (p1, p2): (CGPoint, CGPoint) = nwse
-                ? (CGPoint(x: m, y: m), CGPoint(x: size - m, y: size - m))
-                : (CGPoint(x: size - m, y: m), CGPoint(x: m, y: size - m))
-            let dir = atan2(p2.y - p1.y, p2.x - p1.x)
+            let center = CGPoint(x: size / 2, y: size / 2)
+            let angle: CGFloat = nwse ? .pi / 4 : .pi * 3 / 4
+            let ux = cos(angle), uy = sin(angle)
+            // offset > length で 2 つの三角形の間に隙間を空ける
+            let offset: CGFloat = 9.0
 
-            func drawLine(lw: CGFloat, col: CGColor) {
-                ctx.setLineWidth(lw); ctx.setLineCap(.round)
-                ctx.setStrokeColor(col)
-                ctx.move(to: p1); ctx.addLine(to: p2); ctx.strokePath()
-            }
-            func drawHead(at tip: CGPoint, toward: CGFloat, sz: CGFloat, col: CGColor) {
-                ctx.setFillColor(col)
-                ctx.move(to: tip)
-                ctx.addLine(to: CGPoint(x: tip.x + sz * cos(toward + .pi + 0.45),
-                                        y: tip.y + sz * sin(toward + .pi + 0.45)))
-                ctx.addLine(to: CGPoint(x: tip.x + sz * cos(toward + .pi - 0.45),
-                                        y: tip.y + sz * sin(toward + .pi - 0.45)))
-                ctx.closePath(); ctx.fillPath()
+            func trianglePath(tip: CGPoint, outward: CGFloat) -> CGPath {
+                let length: CGFloat = 6.5
+                let halfWidth: CGFloat = 4.3
+                let ax = cos(outward), ay = sin(outward)
+                let bx = -ay, by = ax
+                let base = CGPoint(x: tip.x - length * ax, y: tip.y - length * ay)
+                let path = CGMutablePath()
+                path.move(to: tip)
+                path.addLine(to: CGPoint(x: base.x + halfWidth * bx,
+                                         y: base.y + halfWidth * by))
+                path.addLine(to: CGPoint(x: base.x - halfWidth * bx,
+                                         y: base.y - halfWidth * by))
+                path.closeSubpath()
+                return path
             }
 
-            drawLine(lw: 2.5, col: NSColor.white.cgColor)
-            drawHead(at: p1, toward: dir + .pi, sz: 4.5, col: NSColor.white.cgColor)
-            drawHead(at: p2, toward: dir,       sz: 4.5, col: NSColor.white.cgColor)
-            drawLine(lw: 1.5, col: NSColor.black.cgColor)
-            drawHead(at: p1, toward: dir + .pi, sz: 3.5, col: NSColor.black.cgColor)
-            drawHead(at: p2, toward: dir,       sz: 3.5, col: NSColor.black.cgColor)
+            func drawTriangle(tip: CGPoint, outward: CGFloat) {
+                let path = trianglePath(tip: tip, outward: outward)
+                ctx.setLineCap(.round)
+                ctx.setLineJoin(.round)
+
+                // 白ハロー（縁取り）
+                ctx.addPath(path)
+                ctx.setStrokeColor(NSColor.white.cgColor)
+                ctx.setLineWidth(2.6)
+                ctx.strokePath()
+
+                // 黒で塗りつぶし
+                ctx.addPath(path)
+                ctx.setFillColor(NSColor.black.cgColor)
+                ctx.fillPath()
+            }
+
+            let tip1 = CGPoint(x: center.x - offset * ux, y: center.y - offset * uy)
+            let tip2 = CGPoint(x: center.x + offset * ux, y: center.y + offset * uy)
+            drawTriangle(tip: tip1, outward: angle + .pi)
+            drawTriangle(tip: tip2, outward: angle)
             return true
         }
         return NSCursor(image: img, hotSpot: NSPoint(x: size / 2, y: size / 2))

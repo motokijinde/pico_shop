@@ -11,6 +11,7 @@ extension CanvasView {
                 if dragAction == nil {
                     dragAction = decideAction(viewPoint: v.startLocation,
                                               canvasPoint: model.viewToCanvas(v.startLocation))
+                    updateCursor()
                 }
                 updateDrag(v, canvasP: canvasP)
             }
@@ -20,6 +21,7 @@ extension CanvasView {
                 previewRect = nil
                 lassoPoints = []
                 lastBrushPoint = nil
+                updateCursor()
             }
     }
 
