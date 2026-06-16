@@ -50,14 +50,18 @@ struct LayerDetailView: View {
             HStack(spacing: 6) {
                 NumberField(label: "X", text: $offsetXText, width: 48) {
                     if let v = Int(offsetXText) {
-                        model.pushUndo("レイヤーの移動")
-                        model.updateLayer(layer.id) { $0.offsetX = v }
+                        model.commitMoveTransformIfNeeded {
+                            model.pushUndo("レイヤーの移動")
+                            model.updateLayer(layer.id) { $0.offsetX = v }
+                        }
                     }
                 }
                 NumberField(label: "Y", text: $offsetYText, width: 48) {
                     if let v = Int(offsetYText) {
-                        model.pushUndo("レイヤーの移動")
-                        model.updateLayer(layer.id) { $0.offsetY = v }
+                        model.commitMoveTransformIfNeeded {
+                            model.pushUndo("レイヤーの移動")
+                            model.updateLayer(layer.id) { $0.offsetY = v }
+                        }
                     }
                 }
             }

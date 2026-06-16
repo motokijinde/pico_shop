@@ -9,15 +9,26 @@ extension AppModel {
     // MARK: 新規ドキュメント
 
     func newDocument(width: Int, height: Int, background: PixelColor) {
+        if tool == .move, floatingLayer != nil {
+            commitMoveTransform { [weak self] in
+                self?.newDocument(width: width, height: height, background: background)
+            }
+            return
+        }
         pushUndo("新規ファイル")
         canvasWidth = max(1, width)
         canvasHeight = max(1, height)
         let layer = Layer(name: "レイヤー1",
                           buffer: PixelBuffer(width: canvasWidth, height: canvasHeight, fill: background))
         layers = [layer]
-        activeLayerID = layer.id
         selection = nil
         pendingTransform = SelectionTransform()
+        floatingLayer = nil
+        moveLayerID = nil
+        moveStartedWithSelection = false
+        originalMoveBuffer = nil
+        originalMoveBounds = nil
+        activeLayerID = layer.id
         projectURL = nil
         recomposite()
         fitToView()
@@ -27,6 +38,12 @@ extension AppModel {
 
     /// 初回（レイヤーが空 or 全レイヤーが空白 1 枚のみ）ならキャンバスサイズを画像に合わせる
     func openImageFiles(_ urls: [URL]) {
+        if tool == .move, floatingLayer != nil {
+            commitMoveTransform { [weak self] in
+                self?.openImageFiles(urls)
+            }
+            return
+        }
         var added = false
         let pristine = isPristine  // pushUndo の前に判定（undoStack を見るため）
         for url in urls {
@@ -62,6 +79,12 @@ extension AppModel {
     // MARK: レイヤー操作
 
     func addEmptyLayer() {
+        if tool == .move, floatingLayer != nil {
+            commitMoveTransform { [weak self] in
+                self?.addEmptyLayer()
+            }
+            return
+        }
         pushUndo("新規レイヤー")
         let layer = Layer(name: "レイヤー\(layers.count + 1)",
                           buffer: PixelBuffer(width: canvasWidth, height: canvasHeight))
@@ -75,8 +98,19 @@ extension AppModel {
         panel.allowedContentTypes = [.png, .jpeg, .tiff, .bmp]
         panel.allowsMultipleSelection = true
         guard panel.runModal() == .OK else { return }
+        if tool == .move, floatingLayer != nil {
+            let urls = panel.urls
+            commitMoveTransform { [weak self] in
+                self?.addLayerFiles(urls)
+            }
+            return
+        }
+        addLayerFiles(panel.urls)
+    }
+
+    private func addLayerFiles(_ urls: [URL]) {
         var added = false
-        for url in panel.urls {
+        for url in urls {
             guard let img = NSImage(contentsOf: url),
                   let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil),
                   let buf = PixelBuffer(cgImage: cg) else { continue }
@@ -90,6 +124,12 @@ extension AppModel {
     }
 
     func deleteActiveLayer() {
+        if tool == .move, floatingLayer != nil {
+            commitMoveTransform { [weak self] in
+                self?.deleteActiveLayer()
+            }
+            return
+        }
         guard layers.count > 1 else {
             warn("最後のレイヤーは削除できません")
             return
@@ -106,6 +146,12 @@ extension AppModel {
     }
 
     func duplicateActiveLayer() {
+        if tool == .move, floatingLayer != nil {
+            commitMoveTransform { [weak self] in
+                self?.duplicateActiveLayer()
+            }
+            return
+        }
         guard let idx = activeLayerIndex else { return }
         pushUndo("レイヤーを複製")
         var copy = Layer(name: layers[idx].name + " コピー", buffer: layers[idx].buffer,
@@ -119,6 +165,12 @@ extension AppModel {
 
     /// up=true で 1 つ上（手前）へ
     func moveActiveLayer(up: Bool) {
+        if tool == .move, floatingLayer != nil {
+            commitMoveTransform { [weak self] in
+                self?.moveActiveLayer(up: up)
+            }
+            return
+        }
         guard let idx = activeLayerIndex else { return }
         let newIdx = up ? idx - 1 : idx + 1
         guard newIdx >= 0, newIdx < layers.count else { return }
@@ -128,6 +180,12 @@ extension AppModel {
     }
 
     func reorderLayers(fromOffsets: IndexSet, toOffset: Int) {
+        if tool == .move, floatingLayer != nil {
+            commitMoveTransform { [weak self] in
+                self?.reorderLayers(fromOffsets: fromOffsets, toOffset: toOffset)
+            }
+            return
+        }
         pushUndo("レイヤーの並び替え")
         layers.move(fromOffsets: fromOffsets, toOffset: toOffset)
         recomposite()
@@ -135,6 +193,12 @@ extension AppModel {
 
     /// 表示中のレイヤーをすべて 1 つに統合（非表示レイヤーは残す）
     func mergeVisibleLayers() {
+        if tool == .move, floatingLayer != nil {
+            commitMoveTransform { [weak self] in
+                self?.mergeVisibleLayers()
+            }
+            return
+        }
         let visible = layers.filter { $0.visible }
         guard visible.count >= 2 else {
             warn("統合できる表示レイヤーが 2 つ以上ありません")
@@ -162,10 +226,19 @@ extension AppModel {
 
     // MARK: レイヤープロパティ（パレットから）
 
-    func updateLayer(_ id: UUID, _ body: (inout Layer) -> Void) {
+    func updateLayer(_ id: UUID, _ body: @escaping (inout Layer) -> Void) {
+        if tool == .move, floatingLayer != nil {
+            commitMoveTransform { [weak self] in
+                self?.updateLayer(id, body)
+            }
+            return
+        }
         guard let idx = layers.firstIndex(where: { $0.id == id }) else { return }
         body(&layers[idx])
         recomposite()
+        if tool == .move, id == activeLayerID {
+            refreshMoveTransformTargetForLayerChange()
+        }
     }
 
 }

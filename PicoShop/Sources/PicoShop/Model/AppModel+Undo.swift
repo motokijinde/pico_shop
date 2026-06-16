@@ -46,12 +46,14 @@ extension AppModel {
         canvasWidth = snap.canvasWidth
         canvasHeight = snap.canvasHeight
         selection = snap.selection
-        activeLayerID = snap.activeLayerID
         pendingTransform = SelectionTransform()
         floatingLayer = nil
+        moveLayerID = nil
+        moveStartedWithSelection = false
         pixelMovePreview = nil
         originalMoveBuffer = nil
         originalMoveBounds = nil
+        activeLayerID = snap.activeLayerID
         coalesceKey = nil
         recomposite()
         if tool == .move { beginMoveTransform() }

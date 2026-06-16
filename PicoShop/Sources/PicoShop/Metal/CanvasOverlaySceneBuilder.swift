@@ -8,9 +8,10 @@ extension CanvasRenderer {
         let toView = model.canvasToViewAffine
         let accent = NSColor.controlAccentColor
 
-        // キャンバス外の暗転 + 点線枠
-        s.dimOutside(canvasRect, in: viewSize, color: NSColor.black.withAlphaComponent(0.35))
-        s.strokeRect(canvasRect, width: 1, color: .white, dash: .init(on: 5, off: 4))
+        // キャンバス外は透明部分のチェック柄と混ざらないよう、暗い作業台として明確に分ける。
+        s.dimOutside(canvasRect, in: viewSize,
+                     color: NSColor(srgbRed: 0.07, green: 0.075, blue: 0.08, alpha: 0.82))
+        s.strokeRect(canvasRect, width: 1, color: NSColor(srgbRed: 0.28, green: 0.30, blue: 0.32, alpha: 1))
 
         // 中心の十字（破線）
         let center = model.canvasToView(model.canvasCenter)

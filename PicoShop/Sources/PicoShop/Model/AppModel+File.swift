@@ -27,6 +27,12 @@ extension AppModel {
     }
 
     func openProject(url: URL) {
+        if tool == .move, floatingLayer != nil {
+            commitMoveTransform { [weak self] in
+                self?.openProject(url: url)
+            }
+            return
+        }
         do {
             let (loadedLayers, w, h) = try ProjectIO.load(from: url)
             guard !loadedLayers.isEmpty else {
@@ -37,9 +43,14 @@ extension AppModel {
             layers = loadedLayers
             canvasWidth = w
             canvasHeight = h
-            activeLayerID = loadedLayers.first?.id
             selection = nil
             pendingTransform = SelectionTransform()
+            floatingLayer = nil
+            moveLayerID = nil
+            moveStartedWithSelection = false
+            originalMoveBuffer = nil
+            originalMoveBounds = nil
+            activeLayerID = loadedLayers.first?.id
             projectURL = url
             recomposite()
             fitToView()
@@ -60,6 +71,12 @@ extension AppModel {
             url = chosen
         }
         guard let url else { return }
+        commitMoveTransformIfNeeded { [weak self] in
+            self?.saveProject(to: url)
+        }
+    }
+
+    private func saveProject(to url: URL) {
         do {
             try ProjectIO.save(layers: layers, canvasWidth: canvasWidth, canvasHeight: canvasHeight, to: url)
             projectURL = url
@@ -76,6 +93,12 @@ extension AppModel {
         panel.allowedContentTypes = [format.contentType]
         panel.nameFieldStringValue = "\(fileName).\(format.fileExtension)"
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        commitMoveTransformIfNeeded { [weak self] in
+            self?.exportImage(format: format, sizeMode: sizeMode, jpegQuality: jpegQuality, to: url)
+        }
+    }
+
+    private func exportImage(format: ExportFormat, sizeMode: ExportSizeMode, jpegQuality: Double, to url: URL) {
         do {
             try Exporter.export(layers: layers, canvasWidth: canvasWidth, canvasHeight: canvasHeight,
                                 format: format, sizeMode: sizeMode, jpegQuality: jpegQuality, to: url)

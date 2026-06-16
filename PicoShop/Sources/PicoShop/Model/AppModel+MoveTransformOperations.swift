@@ -11,6 +11,8 @@ extension AppModel {
         guard let idx = activeLayerIndex else { return }
         guard !layers[idx].locked else { return }
         let layer = layers[idx]
+        moveLayerID = layer.id
+        moveStartedWithSelection = selection != nil
 
         if let sel = selection, let b = sel.bounds() {
             originalMoveBounds = b
@@ -25,7 +27,9 @@ extension AppModel {
     /// ドラッグ開始時（遅延実行）：ピクセル抽出をバックグラウンドで行い floatingLayer をセット
     func extractMovePixels() {
         guard !isMoveExtracting, floatingLayer == nil,
-              let idx = activeLayerIndex, originalMoveBounds != nil else { return }
+              let moveLayerID,
+              let idx = layers.firstIndex(where: { $0.id == moveLayerID }),
+              originalMoveBounds != nil else { return }
 
         isMoveExtracting = true
 
@@ -95,7 +99,7 @@ extension AppModel {
                 if !self.pendingTransform.isIdentity {
                     self.rasterizePreview()
                 } else {
-                    self.recomposite(includeMovePreview: !self.isDraggingTransform)
+                    self.recomposite()
                 }
             }
         }
@@ -105,21 +109,22 @@ extension AppModel {
     /// PixelBuffer への焼き込みは commitMoveTransform() で一度だけ行う。
     func rasterizePreview() {
         guard originalMoveBuffer != nil, originalMoveBounds != nil else { return }
-        recomposite(includeMovePreview: !isDraggingTransform)
+        recomposite()
     }
 
-    /// 確定：floatingLayer をキャンバスクリップしてアクティブレイヤーに書き込む
+    /// 確定：floatingLayer をキャンバスクリップして移動開始時のレイヤーに書き込む
     func commitMoveTransform(completion: (() -> Void)? = nil) {
         guard originalMoveBounds != nil else { return }
         guard let fl = floatingLayer, let bounds = originalMoveBounds else {
             cleanupMoveTransform()
-            beginMoveTransform()
+            if tool == .move { beginMoveTransform() }
             completion?()
             return
         }
-        guard let idx = activeLayerIndex else {
+        guard let moveLayerID,
+              let idx = layers.firstIndex(where: { $0.id == moveLayerID }) else {
             cleanupMoveTransform()
-            beginMoveTransform()
+            if tool == .move { beginMoveTransform() }
             completion?()
             return
         }
@@ -134,8 +139,10 @@ extension AppModel {
         let layerOX     = layers[idx].offsetX
         let layerOY     = layers[idx].offsetY
         let moveBuf     = originalMoveBuffer ?? fl.buffer
+        let targetLayerID = moveLayerID
         let cw = canvasWidth, ch = canvasHeight
         let sel = selection
+        let preservesSelection = moveStartedWithSelection
         let t   = pendingTransform
         let q   = resizeOpts.quality
         cleanupMoveTransform()
@@ -156,18 +163,23 @@ extension AppModel {
                                                      destinationOffsetY: layerOY,
                                                      clipCanvasWidth: cw,
                                                      clipCanvasHeight: ch)
-            let newSel = PixelTransformEngine.transformedSelection(sel, bounds: bounds,
-                                                                   transform: t,
-                                                                   canvasWidth: cw,
-                                                                   canvasHeight: ch)
+            let newSel = preservesSelection
+                ? PixelTransformEngine.transformedSelection(sel, bounds: bounds,
+                                                            transform: t,
+                                                            canvasWidth: cw,
+                                                            canvasHeight: ch)
+                : nil
 
-            await MainActor.run { [weak self, result, newSel] in
-                guard let self else { return }
-                self.layers[idx].buffer = result
-                self.layers[idx].markContentChanged()
+            await MainActor.run { [weak self, targetLayerID, result, newSel] in
+                guard let self,
+                      let targetIndex = self.layers.firstIndex(where: { $0.id == targetLayerID }) else { return }
+                self.layers[targetIndex].buffer = result
+                self.layers[targetIndex].markContentChanged()
                 self.selection = newSel
                 self.recomposite()
-                self.beginMoveTransform()  // 確定後も move ツールが継続できるよう即再初期化
+                if self.tool == .move {
+                    self.beginMoveTransform()  // 確定後も move ツールが継続できるよう即再初期化
+                }
                 completion?()
             }
         }
@@ -183,9 +195,44 @@ extension AppModel {
         recomposite()
     }
 
+    func refreshMoveTransformTargetForSelectionChange() {
+        guard tool == .move else { return }
+        guard floatingLayer == nil else {
+            commitMoveTransform { [weak self] in
+                self?.refreshMoveTransformTargetForSelectionChange()
+            }
+            return
+        }
+        cleanupMoveTransform()
+        beginMoveTransform()
+        recomposite()
+    }
+
+    func refreshMoveTransformTargetForLayerChange() {
+        guard tool == .move else { return }
+        guard floatingLayer == nil else {
+            commitMoveTransform()
+            return
+        }
+        cleanupMoveTransform()
+        beginMoveTransform()
+        recomposite()
+    }
+
+    func commitMoveTransformIfNeeded(then action: @escaping () -> Void) {
+        guard tool == .move, floatingLayer != nil else {
+            action()
+            return
+        }
+        commitMoveTransform(completion: action)
+    }
+
     private func cleanupMoveTransform() {
         cancelRasterTasks()   // 飛行中の抽出・プレビュー・確定タスクを一括キャンセル
+        isMoveExtracting = false
         floatingLayer = nil
+        moveLayerID = nil
+        moveStartedWithSelection = false
         originalMoveBuffer = nil
         originalMoveBounds = nil
         pendingTransform = SelectionTransform()

@@ -5,8 +5,8 @@ extension AppModel {
 
     // MARK: - 合成
 
-    /// レイヤー変更後に呼ぶ。move 中の floatingLayer は GPU 上の変形プレビューとして合成する。
-    func recomposite(includeMovePreview: Bool = true) {
+    /// レイヤー変更後に呼ぶ。move 中の floatingLayer はメインキャンバス側で未確定プレビューとして描く。
+    func recomposite(includeMovePreview: Bool = false) {
         let preview = includeMovePreview ? currentMoveFloatingPreview() : nil
         let hasMoveFloatingLayer = floatingLayer != nil && originalMoveBounds != nil
         var baseLayers = layers

@@ -126,7 +126,7 @@ final class CanvasRenderer: NSObject, MTKViewDelegate {
 
             encodeCheckerboard(enc, model: model, viewSize: viewSize)
             encodeComposite(enc, model: model, viewSize: viewSize)
-            encodeMovePreview(enc, model: model, viewSize: viewSize)
+            encodeMovePreview(enc, model: model, viewSize: viewSize, scale: scale)
             let scene = buildScene(model: model, viewSize: viewSize)
             overlay.encode(scene: scene, encoder: enc, viewSize: viewSize, scale: scale)
             enc.endEncoding()

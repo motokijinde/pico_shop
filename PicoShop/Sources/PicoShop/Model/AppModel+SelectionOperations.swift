@@ -10,6 +10,7 @@ extension AppModel {
         pushUndo(label)
         selection = (mask?.isEmpty ?? true) ? nil : mask
         pendingTransform = SelectionTransform()
+        refreshMoveTransformTargetForSelectionChange()
     }
 
     /// selectionOperationMode に従って選択を適用（新規/追加/除外）
@@ -28,7 +29,14 @@ extension AppModel {
     }
 
     func selectAll() {
-        setSelection(.all(width: canvasWidth, height: canvasHeight), label: "すべてを選択")
+        guard let layer = activeLayer else {
+            warn("レイヤーが選択されていません")
+            return
+        }
+        setSelection(
+            .rect(width: canvasWidth, height: canvasHeight, rect: layer.frame),
+            label: "すべてを選択"
+        )
     }
 
     func invertSelection() {
@@ -41,10 +49,20 @@ extension AppModel {
     }
 
     func clearSelection() {
-        guard selection != nil else { return }
+        if tool == .move, floatingLayer != nil {
+            commitMoveTransform { [weak self] in
+                self?.clearSelection()
+            }
+            return
+        }
+        guard selection != nil else {
+            refreshMoveTransformTargetForSelectionChange()
+            return
+        }
         pushUndo("選択をクリア")
         selection = nil
         pendingTransform = SelectionTransform()
+        refreshMoveTransformTargetForSelectionChange()
     }
 
     func growSelection(by px: Int) {

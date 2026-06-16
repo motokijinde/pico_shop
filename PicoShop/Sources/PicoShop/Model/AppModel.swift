@@ -30,7 +30,11 @@ final class AppModel: ObservableObject {
     /// 選択範囲の世代番号（Metal 側のアンツメッシュ再構築判定用）
     private(set) var selectionVersion: UInt64 = 0
     @Published var activeLayerID: UUID? {
-        didSet { if activeLayerID != oldValue { colorRangeLastPoint = nil } }
+        didSet {
+            guard activeLayerID != oldValue else { return }
+            colorRangeLastPoint = nil
+            refreshMoveTransformTargetForLayerChange()
+        }
     }
 
     /// マーチングアンツ用の境界パス（selection 変更時に非同期で再計算されるキャッシュ）
@@ -77,6 +81,10 @@ final class AppModel: ObservableObject {
 
     /// move ツールのプレビュー用フローティングレイヤー（ツールアクティブ中は常に有効）
     @Published var floatingLayer: Layer?
+    /// move ツールで現在ピクセルを持ち上げている元レイヤー
+    var moveLayerID: UUID?
+    /// move 開始時に選択範囲を対象にしていたか。未選択のレイヤー全体移動では選択を作らない。
+    var moveStartedWithSelection = false
 
     struct PixelMovePreview {
         var initialLayerOffsetX: Int

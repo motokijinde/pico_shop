@@ -15,6 +15,11 @@ extension AppModel {
         return layers.firstIndex { $0.id == id }
     }
 
+    var moveLayer: Layer? {
+        guard let id = moveLayerID else { return nil }
+        return layers.first { $0.id == id }
+    }
+
     /// アクティブレイヤーを変更（ロック検査つき）。ロック中なら警告して false。
     func withActiveLayer(checkLock: Bool = true, _ body: (inout Layer) -> Void) -> Bool {
         guard let idx = activeLayerIndex else {
