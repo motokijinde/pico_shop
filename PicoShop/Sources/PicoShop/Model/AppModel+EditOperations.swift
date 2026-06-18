@@ -7,7 +7,7 @@ extension AppModel {
     // MARK: クロップ
 
     func cropActiveLayerToSelection() {
-        applySelectionTransform()
+        commitSynchronousTransformIfNeeded()
         guard let sel = selection, let b = sel.bounds() else {
             warn("選択範囲がありません")
             return
@@ -69,7 +69,7 @@ extension AppModel {
     // MARK: クリップボード
 
     func copySelectionToPasteboard() {
-        applySelectionTransform()
+        commitSynchronousTransformIfNeeded()
         guard let layer = activeLayer else { return }
         var buf: PixelBuffer
         if let sel = selection, let b = sel.bounds() {

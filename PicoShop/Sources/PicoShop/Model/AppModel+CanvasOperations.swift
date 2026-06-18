@@ -8,6 +8,7 @@ extension AppModel {
 
     /// anchor: 0–8（3×3 グリッド、0=左上, 4=中央, 8=右下）
     func resizeCanvas(width: Int, height: Int, anchor: Int) {
+        guard commitPendingPixelTransformIfNeeded(preservesSelection: true) else { return }
         let w = max(1, width), h = max(1, height)
         pushUndo("キャンバスサイズ変更")
         let ax = Double(anchor % 3) / 2.0   // 0, 0.5, 1
@@ -38,6 +39,7 @@ extension AppModel {
 
     /// 全表示レイヤーの結合範囲でキャンバスを自動リサイズ
     func fitCanvasToLayers() {
+        guard commitPendingPixelTransformIfNeeded(preservesSelection: false) else { return }
         let visible = layers.filter { $0.visible }
         guard !visible.isEmpty else { return }
         var bounds = visible[0].frame

@@ -3,16 +3,39 @@ import CoreGraphics
 enum PixelTransformEngine {
     static func transformed(buffer: PixelBuffer, transform t: SelectionTransform,
                             quality: ResampleQuality) -> PixelBuffer {
-        var result = buffer
-        if t.rotation != 0 {
-            let (rotated, _, _) = result.cpuRotated(byDegrees: t.rotation, quality: quality)
-            result = rotated
-        }
-        if abs(t.scaleX - 1) > 0.001 || abs(t.scaleY - 1) > 0.001 {
-            let width = max(1, Int((Double(result.width) * abs(t.scaleX)).rounded()))
-            let height = max(1, Int((Double(result.height) * abs(t.scaleY)).rounded()))
-            result = result.cpuResized(width: width, height: height, quality: quality)
-        }
+        guard !t.isIdentity else { return buffer }
+        guard let src = buffer.makeCGImage() else { return buffer }
+
+        let sourceRect = CGRect(x: 0, y: 0, width: buffer.width, height: buffer.height)
+        let center = CGPoint(x: sourceRect.midX, y: sourceRect.midY)
+        var shapeTransform = t
+        shapeTransform.dx = 0
+        shapeTransform.dy = 0
+        let affine = shapeTransform.affine(center: center)
+        let corners = [
+            CGPoint(x: sourceRect.minX, y: sourceRect.minY).applying(affine),
+            CGPoint(x: sourceRect.maxX, y: sourceRect.minY).applying(affine),
+            CGPoint(x: sourceRect.minX, y: sourceRect.maxY).applying(affine),
+            CGPoint(x: sourceRect.maxX, y: sourceRect.maxY).applying(affine)
+        ]
+        let minX = corners.map(\.x).min() ?? 0
+        let maxX = corners.map(\.x).max() ?? sourceRect.width
+        let minY = corners.map(\.y).min() ?? 0
+        let maxY = corners.map(\.y).max() ?? sourceRect.height
+        let newW = max(1, Int((maxX - minX).rounded(.up)))
+        let newH = max(1, Int((maxY - minY).rounded(.up)))
+
+        guard let ctx = CGContext(
+            data: nil, width: newW, height: newH,
+            bitsPerComponent: 8, bytesPerRow: 0,
+            space: PixelBuffer.sRGB,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return buffer }
+        ctx.interpolationQuality = quality.cgQuality
+        ctx.concatenate(affine.concatenating(CGAffineTransform(translationX: -minX, y: -minY)))
+        ctx.draw(src, in: sourceRect)
+
+        guard let out = ctx.makeImage(), let result = PixelBuffer(cgImage: out) else { return buffer }
         return result
     }
 
@@ -79,6 +102,38 @@ enum PixelTransformEngine {
             }
         }
         return result
+    }
+
+    static func pastedExpanding(source: PixelBuffer, sourceOffsetX: Int, sourceOffsetY: Int,
+                                onto destination: PixelBuffer,
+                                destinationOffsetX: Int, destinationOffsetY: Int)
+        -> (buffer: PixelBuffer, offsetX: Int, offsetY: Int) {
+        let destinationFrame = CGRect(x: destinationOffsetX, y: destinationOffsetY,
+                                      width: destination.width, height: destination.height)
+        let sourceFrame = CGRect(x: sourceOffsetX, y: sourceOffsetY,
+                                 width: source.width, height: source.height)
+        let frame = destinationFrame.union(sourceFrame).integral
+        let newOffsetX = Int(frame.minX)
+        let newOffsetY = Int(frame.minY)
+        var expanded = PixelBuffer(width: max(1, Int(frame.width)),
+                                   height: max(1, Int(frame.height)))
+
+        for y in 0..<destination.height {
+            for x in 0..<destination.width {
+                copyPixel(from: destination, x: x, y: y,
+                          to: &expanded,
+                          x: x + destinationOffsetX - newOffsetX,
+                          y: y + destinationOffsetY - newOffsetY)
+            }
+        }
+
+        let pasted = pasted(source: source,
+                            sourceOffsetX: sourceOffsetX,
+                            sourceOffsetY: sourceOffsetY,
+                            onto: expanded,
+                            destinationOffsetX: newOffsetX,
+                            destinationOffsetY: newOffsetY)
+        return (pasted, newOffsetX, newOffsetY)
     }
 
     static func transformedSelection(_ selection: SelectionMask?, bounds: CGRect,

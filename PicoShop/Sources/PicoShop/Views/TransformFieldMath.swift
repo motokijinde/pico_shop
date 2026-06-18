@@ -49,12 +49,20 @@ enum TransformFieldMath {
         switch edited {
         case .width:
             guard let width = Double(widthText), width >= 1 else { return nil }
-            sx = max(0.01, width / Double(base.width))
-            sy = keepAspect ? sx : scale(from: heightText, fallback: abs(current.scaleY), baseLength: Double(base.height))
+            sx = signedScale(magnitude: max(0.01, width / Double(base.width)),
+                             preservingSignOf: current.scaleX)
+            sy = keepAspect
+                ? signedScale(magnitude: abs(sx), preservingSignOf: current.scaleY)
+                : signedScale(from: heightText, fallback: abs(current.scaleY),
+                              baseLength: Double(base.height), preservingSignOf: current.scaleY)
         case .height:
             guard let height = Double(heightText), height >= 1 else { return nil }
-            sy = max(0.01, height / Double(base.height))
-            sx = keepAspect ? sy : scale(from: widthText, fallback: abs(current.scaleX), baseLength: Double(base.width))
+            sy = signedScale(magnitude: max(0.01, height / Double(base.height)),
+                             preservingSignOf: current.scaleY)
+            sx = keepAspect
+                ? signedScale(magnitude: abs(sy), preservingSignOf: current.scaleX)
+                : signedScale(from: widthText, fallback: abs(current.scaleX),
+                              baseLength: Double(base.width), preservingSignOf: current.scaleX)
         }
 
         var next = current
@@ -73,12 +81,18 @@ enum TransformFieldMath {
         switch edited {
         case .width:
             guard let pct = Double(widthPercentText), pct >= 0.1 else { return nil }
-            sx = max(0.01, pct / 100)
-            sy = keepAspect ? sx : abs(current.scaleY)
+            sx = signedScale(magnitude: max(0.01, pct / 100),
+                             preservingSignOf: current.scaleX)
+            sy = keepAspect
+                ? signedScale(magnitude: abs(sx), preservingSignOf: current.scaleY)
+                : current.scaleY
         case .height:
             guard let pct = Double(heightPercentText), pct >= 0.1 else { return nil }
-            sy = max(0.01, pct / 100)
-            sx = keepAspect ? sy : abs(current.scaleX)
+            sy = signedScale(magnitude: max(0.01, pct / 100),
+                             preservingSignOf: current.scaleY)
+            sx = keepAspect
+                ? signedScale(magnitude: abs(sy), preservingSignOf: current.scaleX)
+                : current.scaleX
         }
 
         var next = current
@@ -114,6 +128,16 @@ enum TransformFieldMath {
     private static func scale(from text: String, fallback: Double, baseLength: Double) -> Double {
         guard let value = Double(text), value >= 1 else { return max(0.01, fallback) }
         return max(0.01, value / baseLength)
+    }
+
+    private static func signedScale(from text: String, fallback: Double,
+                                    baseLength: Double, preservingSignOf current: Double) -> Double {
+        signedScale(magnitude: scale(from: text, fallback: fallback, baseLength: baseLength),
+                    preservingSignOf: current)
+    }
+
+    private static func signedScale(magnitude: Double, preservingSignOf current: Double) -> Double {
+        current < 0 ? -magnitude : magnitude
     }
 
     private static func integerString(_ value: CGFloat) -> String {

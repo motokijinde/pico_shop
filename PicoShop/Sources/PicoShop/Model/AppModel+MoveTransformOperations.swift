@@ -155,14 +155,24 @@ extension AppModel {
             let midY = bounds.midY + t.dy
             let sourceOffsetX = Int((midX - Double(transformed.width) / 2).rounded())
             let sourceOffsetY = Int((midY - Double(transformed.height) / 2).rounded())
-            let result = PixelTransformEngine.pasted(source: transformed,
-                                                     sourceOffsetX: sourceOffsetX,
-                                                     sourceOffsetY: sourceOffsetY,
-                                                     onto: layerBuf,
-                                                     destinationOffsetX: layerOX,
-                                                     destinationOffsetY: layerOY,
-                                                     clipCanvasWidth: cw,
-                                                     clipCanvasHeight: ch)
+            let result: PixelBuffer
+            let resultOffsetX: Int
+            let resultOffsetY: Int
+            if preservesSelection {
+                let pasted = PixelTransformEngine.pastedExpanding(source: transformed,
+                                                                  sourceOffsetX: sourceOffsetX,
+                                                                  sourceOffsetY: sourceOffsetY,
+                                                                  onto: layerBuf,
+                                                                  destinationOffsetX: layerOX,
+                                                                  destinationOffsetY: layerOY)
+                result = pasted.buffer
+                resultOffsetX = pasted.offsetX
+                resultOffsetY = pasted.offsetY
+            } else {
+                result = transformed
+                resultOffsetX = sourceOffsetX
+                resultOffsetY = sourceOffsetY
+            }
             let newSel = preservesSelection
                 ? PixelTransformEngine.transformedSelection(sel, bounds: bounds,
                                                             transform: t,
@@ -170,10 +180,12 @@ extension AppModel {
                                                             canvasHeight: ch)
                 : nil
 
-            await MainActor.run { [weak self, targetLayerID, result, newSel] in
+            await MainActor.run { [weak self, targetLayerID, result, resultOffsetX, resultOffsetY, newSel] in
                 guard let self,
                       let targetIndex = self.layers.firstIndex(where: { $0.id == targetLayerID }) else { return }
                 self.layers[targetIndex].buffer = result
+                self.layers[targetIndex].offsetX = resultOffsetX
+                self.layers[targetIndex].offsetY = resultOffsetY
                 self.layers[targetIndex].markContentChanged()
                 self.selection = newSel
                 self.recomposite()

@@ -7,7 +7,7 @@ extension AppModel {
     // MARK: カット
 
     func cutSelection() {
-        applySelectionTransform()
+        commitSynchronousTransformIfNeeded()
         guard let sel = selection else {
             warn("選択範囲がありません")
             return
@@ -44,7 +44,7 @@ extension AppModel {
 
     /// 選択範囲内を塗りつぶし
     func fillSelection() {
-        applySelectionTransform()
+        commitSynchronousTransformIfNeeded()
         guard let sel = selection else {
             warn("選択範囲がありません")
             return
@@ -92,6 +92,7 @@ extension AppModel {
     // MARK: リサイズ / 回転 / 反転（selection != nil で選択範囲に適用、nil でレイヤー全体）
 
     func resizeActiveLayer(width: Int, height: Int) {
+        commitSynchronousTransformIfNeeded()
         guard width > 0, height > 0 else {
             warn("サイズが不正です")
             return
@@ -114,6 +115,7 @@ extension AppModel {
     }
 
     func rotate(byDegrees deg: Double) {
+        commitSynchronousTransformIfNeeded()
         if let sel = selection, let b = sel.bounds() {
             pushUndo("選択範囲の回転")
             selection = sel.transformed(dx: 0, dy: 0, scaleX: 1, scaleY: 1,
@@ -134,6 +136,7 @@ extension AppModel {
     }
 
     func flip(horizontal: Bool) {
+        commitSynchronousTransformIfNeeded()
         if let sel = selection, let b = sel.bounds() {
             pushUndo(horizontal ? "選択範囲の水平反転" : "選択範囲の垂直反転")
             selection = sel.transformed(dx: 0, dy: 0,

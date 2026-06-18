@@ -7,6 +7,7 @@ extension AppModel {
     // MARK: 選択操作
 
     func setSelection(_ mask: SelectionMask?, label: String) {
+        guard commitPendingPixelTransformIfNeeded(preservesSelection: true) else { return }
         pushUndo(label)
         selection = (mask?.isEmpty ?? true) ? nil : mask
         pendingTransform = SelectionTransform()
@@ -15,6 +16,7 @@ extension AppModel {
 
     /// selectionOperationMode に従って選択を適用（新規/追加/除外）
     func applySelection(_ mask: SelectionMask, label: String) {
+        guard commitPendingPixelTransformIfNeeded(preservesSelection: true) else { return }
         let result: SelectionMask
         switch selectionOperationMode {
         case .replace:
@@ -40,7 +42,7 @@ extension AppModel {
     }
 
     func invertSelection() {
-        applySelectionTransform()
+        commitSynchronousTransformIfNeeded()
         guard let sel = selection else {
             warn("選択範囲がありません")
             return
@@ -59,6 +61,12 @@ extension AppModel {
             refreshMoveTransformTargetForSelectionChange()
             return
         }
+        if !commitPendingPixelTransformIfNeeded(preservesSelection: false) {
+            return
+        }
+        if selection == nil {
+            return
+        }
         pushUndo("選択をクリア")
         selection = nil
         pendingTransform = SelectionTransform()
@@ -66,7 +74,7 @@ extension AppModel {
     }
 
     func growSelection(by px: Int) {
-        applySelectionTransform()
+        commitSynchronousTransformIfNeeded()
         guard let sel = selection else {
             warn("選択範囲がありません")
             return
@@ -76,7 +84,7 @@ extension AppModel {
     }
 
     func shrinkSelection(by px: Int) {
-        applySelectionTransform()
+        commitSynchronousTransformIfNeeded()
         guard let sel = selection else {
             warn("選択範囲がありません")
             return
@@ -90,12 +98,18 @@ extension AppModel {
     /// 保留中の変形を適用してマスクを再ラスタライズ。
     /// selectionTransform ツールで selection == nil のときはレイヤー全体を選択してから変形する。
     func applySelectionTransform() {
-        if selection == nil, tool == .selectionTransform, let layer = activeLayer {
-            selection = .rect(width: canvasWidth, height: canvasHeight,
-                              rect: CGRect(x: layer.offsetX, y: layer.offsetY,
-                                           width: layer.buffer.width, height: layer.buffer.height))
+        guard !pendingTransform.isIdentity else { return }
+        let baseSelection: SelectionMask?
+        if let selection {
+            baseSelection = selection
+        } else if tool == .selectionTransform, let layer = activeLayer {
+            baseSelection = .rect(width: canvasWidth, height: canvasHeight,
+                                  rect: CGRect(x: layer.offsetX, y: layer.offsetY,
+                                               width: layer.buffer.width, height: layer.buffer.height))
+        } else {
+            baseSelection = nil
         }
-        guard let sel = selection, let b = sel.bounds(), !pendingTransform.isIdentity else { return }
+        guard let sel = baseSelection, let b = sel.bounds() else { return }
         pushUndo("選択範囲の変形")
         selection = sel.transformed(
             dx: pendingTransform.dx, dy: pendingTransform.dy,
