@@ -119,6 +119,19 @@ extension CanvasView {
         return NSCursor(image: img, hotSpot: NSPoint(x: size / 2, y: size / 2))
     }
 
+    static let brushReplaceCursor: NSCursor = makeSelectionCursor(badge: nil)
+    static let brushAddCursor: NSCursor = makeSelectionCursor(badge: "+")
+    static let brushSubtractCursor: NSCursor = makeSelectionCursor(badge: "−")
+
+    /// ブラシカーソル（クロスヘア＋選択操作モードバッジ）
+    static func brushCursor(for mode: SelectionOperationMode) -> NSCursor {
+        switch mode {
+        case .replace: return brushReplaceCursor
+        case .add: return brushAddCursor
+        case .subtract: return brushSubtractCursor
+        }
+    }
+
     /// 回転カーソル：滑らかな円弧 + 接線方向の矢印（時計回り ↻）
     static func makeRotateCursor() -> NSCursor {
         let size: CGFloat = 20

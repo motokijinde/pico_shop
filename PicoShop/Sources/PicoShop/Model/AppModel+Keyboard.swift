@@ -46,11 +46,10 @@ extension AppModel {
     /// 戻り値：イベントを消費したか
     @discardableResult
     func handleArrow(dx: Int, dy: Int, shift: Bool) -> Bool {
-        // 選択変形ツール・選択系ツール・マスクブラシ → 選択マスクを操作
+        // 選択変形ツール・選択系ツール → 選択マスクを操作
         let targetSelectionMask =
             (tool == .selectionTransform && selection != nil) ||
-            (tool.isSelectionTool && selection != nil) ||
-            (tool == .maskBrush && selection != nil)
+            (tool.isSelectionTool && selection != nil)
 
         if targetSelectionMask {
             guard let sel = selection, let b = sel.bounds() else { return false }

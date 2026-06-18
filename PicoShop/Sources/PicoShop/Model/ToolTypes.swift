@@ -67,7 +67,7 @@ enum Tool: String, CaseIterable, Identifiable {
         case .colorRangeSelect:
             return "色域選択: キャンバスをクリックして近い色を選択します。レベル、境界調整、隣接設定は上のバーで調整します。"
         case .maskBrush:
-            return "マスクブラシ: 選択マスクをブラシで追加または削除します。"
+            return "マスクブラシ: 選択マスクをブラシで置換・追加・除外します。"
         case .selectionTransform:
             return "選択変形: ハンドルをドラッグするか数値を入力して選択範囲を変形します。"
         case .move:
@@ -91,10 +91,10 @@ enum Tool: String, CaseIterable, Identifiable {
         }
     }
 
-    /// 選択系ツールか（矩形・フリーハンド・色域）
+    /// 選択系ツールか（矩形・フリーハンド・色域・マスクブラシ）
     var isSelectionTool: Bool {
         switch self {
-        case .rectSelect, .freehandSelect, .colorRangeSelect: return true
+        case .rectSelect, .freehandSelect, .colorRangeSelect, .maskBrush: return true
         default: return false
         }
     }
@@ -143,7 +143,6 @@ struct ColorRangeOptions {
 }
 
 struct BrushOptions {
-    var add: Bool = true
     var size: Double = 20       // 1–100 px
     var hardness: Double = 100  // 0–100 %
     var opacity: Double = 100   // 0–100 %

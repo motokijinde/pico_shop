@@ -5,9 +5,10 @@ extension CanvasView {
     // MARK: - ブラシ
 
     func strokeBrush(to p: CGPoint) {
-        guard model.selection != nil else { return }
+        guard model.brushStrokeSelection != nil else { return }
+        appendBrushStrokePreviewPoint(p)
         let opts = model.brushOpts
-        var sel = model.selection!
+        let addsToSelection = model.selectionOperationMode != .subtract
         if let last = lastBrushPoint {
             let d = distance(last, p)
             let stepLen = max(1.0, opts.size / 4)
@@ -15,15 +16,25 @@ extension CanvasView {
             for i in 1...steps {
                 let t = CGFloat(i) / CGFloat(steps)
                 let q = CGPoint(x: last.x + (p.x - last.x) * t, y: last.y + (p.y - last.y) * t)
-                sel.stampBrush(at: q, size: opts.size, hardness: opts.hardness / 100,
-                               opacity: opts.opacity / 100, add: opts.add)
+                model.brushStrokeSelection?.stampBrush(at: q, size: opts.size, hardness: opts.hardness / 100,
+                                                       opacity: opts.opacity / 100, add: addsToSelection)
             }
         } else {
-            sel.stampBrush(at: p, size: opts.size, hardness: opts.hardness / 100,
-                           opacity: opts.opacity / 100, add: opts.add)
+            model.brushStrokeSelection?.stampBrush(at: p, size: opts.size, hardness: opts.hardness / 100,
+                                                   opacity: opts.opacity / 100, add: addsToSelection)
         }
         lastBrushPoint = p
-        model.selection = sel
+    }
+
+    func appendBrushStrokePreviewPoint(_ p: CGPoint) {
+        guard let last = model.brushStrokePreviewPoints.last else {
+            model.brushStrokePreviewPoints = [p]
+            return
+        }
+        let minSpacing = max(1, 3 / max(model.zoom, 0.01))
+        if distance(last, p) >= minSpacing {
+            model.brushStrokePreviewPoints.append(p)
+        }
     }
 
     // MARK: - ヒットテスト・ユーティリティ
@@ -60,7 +71,7 @@ extension CanvasView {
             case .subtract: Self.colorRangeSubtractCursor.set()
             }
         case .maskBrush:
-            NSCursor.crosshair.set()
+            Self.brushCursor(for: model.selectionOperationMode).set()
         case .selectionTransform, .transform, .move:
             updateTransformCursor()
         case .layerMove:

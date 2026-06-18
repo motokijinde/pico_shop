@@ -37,11 +37,11 @@ extension CanvasRenderer {
             return
         }
 
-        guard model.selection != nil, let path = model.selectionPath else { return }
+        guard model.selection != nil, let polylines = model.selectionBoundaryPolylines else { return }
 
         if antsMeshVersion != model.selectionVersion {
             antsMesh = engine.flatMap { StrokeMesh(device: $0.device,
-                                                   polylines: Self.polylines(from: path),
+                                                   polylines: polylines,
                                                    closed: false) }
             antsMeshVersion = model.selectionVersion
         }
@@ -61,31 +61,4 @@ extension CanvasRenderer {
         appendAlternatingDashedOutline(&s, mesh: mesh,
                                        transform: OverlayScene.Transform2D(affine: affine))
     }
-
-    /// SwiftUI Path（move/line/close 前提）→ ポリライン列。close は先頭点を末尾に複製して表現。
-    static func polylines(from path: Path) -> [[CGPoint]] {
-        var lines: [[CGPoint]] = []
-        var current: [CGPoint] = []
-        func flush() {
-            if current.count >= 2 { lines.append(current) }
-            current = []
-        }
-        path.forEach { element in
-            switch element {
-            case .move(let to):
-                flush()
-                current = [to]
-            case .line(let to):
-                current.append(to)
-            case .quadCurve(let to, _), .curve(let to, _, _):
-                current.append(to)  // 境界パスには現れない想定の保険
-            case .closeSubpath:
-                if let first = current.first { current.append(first) }
-                flush()
-            }
-        }
-        flush()
-        return lines
-    }
 }
-

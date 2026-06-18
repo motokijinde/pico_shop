@@ -174,7 +174,7 @@ extension AppModel {
         let cw = canvasWidth, ch = canvasHeight
         let opts = colorRangeOpts
 
-        let mask = ColorRangeEngine.floodFill(
+        let colorRangeResult = ColorRangeEngine.floodFillResult(
             pixels: layer.buffer.pixels, width: w, height: h,
             startX: lx, startY: ly,
             tolerance: Int(opts.level),
@@ -182,13 +182,18 @@ extension AppModel {
         )
 
         var canvasData = [UInt8](repeating: 0, count: cw * ch)
-        for y in 0..<h {
+        let copyBounds = colorRangeResult.bounds ?? CGRect(x: 0, y: 0, width: w, height: h)
+        let x0 = max(0, Int(copyBounds.minX.rounded(.down)))
+        let y0 = max(0, Int(copyBounds.minY.rounded(.down)))
+        let x1 = min(w, Int(copyBounds.maxX.rounded(.up)))
+        let y1 = min(h, Int(copyBounds.maxY.rounded(.up)))
+        for y in y0..<y1 {
             let cy = y + oy
             guard cy >= 0, cy < ch else { continue }
-            for x in 0..<w {
+            for x in x0..<x1 {
                 let cx = x + ox
                 guard cx >= 0, cx < cw else { continue }
-                canvasData[cy * cw + cx] = mask[y * w + x]
+                canvasData[cy * cw + cx] = colorRangeResult.mask[y * w + x]
             }
         }
 

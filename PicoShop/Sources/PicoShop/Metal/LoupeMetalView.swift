@@ -156,11 +156,11 @@ final class LoupeRenderer: NSObject, MTKViewDelegate {
         }
 
         // 選択境界（マーチングアンツ）
-        if model.loupeShowSelection, model.selection != nil, let path = model.selectionPath {
+        if model.loupeShowSelection, model.selection != nil, let polylines = model.selectionBoundaryPolylines {
             if antsMeshVersion != model.selectionVersion {
                 antsMesh = engine.flatMap {
                     StrokeMesh(device: $0.device,
-                               polylines: Self.polylines(from: path),
+                               polylines: polylines,
                                closed: false)
                 }
                 antsMeshVersion = model.selectionVersion

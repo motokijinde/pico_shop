@@ -20,6 +20,7 @@ extension CanvasView {
                 dragAction = nil
                 previewRect = nil
                 lassoPoints = []
+                model.brushStrokePreviewPoints = []
                 lastBrushPoint = nil
                 updateCursor()
             }
@@ -50,6 +51,13 @@ extension CanvasView {
 
         case .maskBrush:
             model.beginBrushStroke()
+            model.brushStrokePreviewPoints = [canvasPoint]
+            switch model.selectionOperationMode {
+            case .replace:
+                model.brushStrokeSelection = SelectionMask(width: model.canvasWidth, height: model.canvasHeight)
+            case .add, .subtract:
+                model.brushStrokeSelection = model.selection
+            }
             lastBrushPoint = nil
             return .brush
 
@@ -155,6 +163,11 @@ extension CanvasView {
             break
         case .transformMove, .transformScale, .transformRotate:
             finishTransformDrag()
+        case .brush:
+            if let strokeSelection = model.brushStrokeSelection {
+                model.selection = strokeSelection
+            }
+            model.brushStrokeSelection = nil
         case .ignore, nil:
             guard isClick else { break }
             handleClick(at: canvasP)

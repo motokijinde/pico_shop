@@ -72,17 +72,26 @@ extension AppModel {
         let ly = Int(p.y.rounded(.down)) - layer.offsetY
         guard lx >= 0, lx < layer.buffer.width, ly >= 0, ly < layer.buffer.height else { return }
         pushUndo("塗りつぶし")
-        let region = ColorRangeEngine.floodFill(
+        let region = ColorRangeEngine.floodFillResult(
             pixels: layer.buffer.pixels, width: layer.buffer.width, height: layer.buffer.height,
             startX: lx, startY: ly, tolerance: Int(fillOpts.tolerance * 2.55), contiguous: true
         )
         let c = fillOpts.color
         let ok = withActiveLayer { l in
-            for i in 0..<(l.buffer.width * l.buffer.height) where region[i] >= 128 {
-                l.buffer.pixels[i * 4] = c.r
-                l.buffer.pixels[i * 4 + 1] = c.g
-                l.buffer.pixels[i * 4 + 2] = c.b
-                l.buffer.pixels[i * 4 + 3] = c.a
+            guard let bounds = region.bounds else { return }
+            let x0 = max(0, Int(bounds.minX.rounded(.down)))
+            let y0 = max(0, Int(bounds.minY.rounded(.down)))
+            let x1 = min(l.buffer.width, Int(bounds.maxX.rounded(.up)))
+            let y1 = min(l.buffer.height, Int(bounds.maxY.rounded(.up)))
+            for y in y0..<y1 {
+                for x in x0..<x1 {
+                    let i = y * l.buffer.width + x
+                    guard region.mask[i] >= 128 else { continue }
+                    l.buffer.pixels[i * 4] = c.r
+                    l.buffer.pixels[i * 4 + 1] = c.g
+                    l.buffer.pixels[i * 4 + 2] = c.b
+                    l.buffer.pixels[i * 4 + 3] = c.a
+                }
             }
             l.markContentChanged()
         }

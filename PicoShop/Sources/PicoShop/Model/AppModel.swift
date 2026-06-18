@@ -12,15 +12,16 @@ final class AppModel: ObservableObject {
     @Published var selection: SelectionMask? {
         didSet {
             selectionBounds = selection?.bounds()
-            selectionPath = nil
+            selectionBoundaryPolylines = nil
             selectionVersion &+= 1
             let ver = selectionVersion
+            let bounds = selectionBounds
             guard let sel = selection else { return }
             Task.detached(priority: .userInitiated) { [weak self] in
-                let path = sel.boundaryPath()
+                let polylines = sel.boundaryPolylines(in: bounds)
                 await MainActor.run { [weak self] in
                     guard let self, self.selectionVersion == ver else { return }
-                    self.selectionPath = path
+                    self.selectionBoundaryPolylines = polylines
                 }
             }
         }
@@ -35,8 +36,8 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// マーチングアンツ用の境界パス（selection 変更時に非同期で再計算されるキャッシュ）
-    @Published private(set) var selectionPath: Path?
+    /// マーチングアンツ用の境界ポリライン（selection 変更時に非同期で再計算されるキャッシュ）
+    @Published private(set) var selectionBoundaryPolylines: [[CGPoint]]?
 
     /// 選択範囲の bbox キャッシュ（selection 変更時に同期更新、StatusBar 等が毎レンダーで呼ばないように）
     private(set) var selectionBounds: CGRect?
@@ -137,6 +138,11 @@ final class AppModel: ObservableObject {
     var dragPreviewTransform: SelectionTransform? = nil
     /// ドラッグ中フラグ（連続描画モードの判定用）
     var isDraggingTransform: Bool = false
+
+    /// マスクブラシのドラッグ中軌跡（Metal が読む一時表示用。SwiftUI 全体再評価を避ける）
+    var brushStrokePreviewPoints: [CGPoint] = []
+    /// マスクブラシのドラッグ中編集内容。selection の高コスト didSet はドラッグ終了時だけ通す。
+    var brushStrokeSelection: SelectionMask? = nil
 
     /// 変形パネル・矩形選択のオプション
     @Published var transformKeepAspect = false

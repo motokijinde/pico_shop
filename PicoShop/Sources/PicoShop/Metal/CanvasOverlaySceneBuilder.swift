@@ -36,12 +36,28 @@ extension CanvasRenderer {
             s.stroke(lassoPoints.map { $0.applying(toView) }, width: 1, color: accent)
         }
 
+        // マスクブラシのドラッグ中軌跡
+        if model.tool == .maskBrush, !model.brushStrokePreviewPoints.isEmpty {
+            let points = model.brushStrokePreviewPoints.map { $0.applying(toView) }
+            let color = model.selectionOperationMode == .subtract ? NSColor.systemRed : NSColor.systemGreen
+            let width = max(1, CGFloat(model.brushOpts.size) * model.zoom)
+            if points.count >= 2 {
+                s.stroke(points, width: width, color: color.withAlphaComponent(0.18))
+                s.stroke(points, width: 1.5, color: color.withAlphaComponent(0.9))
+            }
+            if let first = points.first {
+                let r = width / 2
+                s.strokeEllipse(in: CGRect(x: first.x - r, y: first.y - r, width: width, height: width),
+                                width: 1, color: color.withAlphaComponent(0.65))
+            }
+        }
+
         // ブラシカーソル（マスクブラシツールのみ）
         if model.tool == .maskBrush, hovering, let mp = model.mouseCanvasPos {
             let r = CGFloat(model.brushOpts.size) / 2 * model.zoom
             let c = model.canvasToView(mp)
             s.strokeEllipse(in: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2),
-                            width: 1, color: model.brushOpts.add ? .green : .red)
+                            width: 1, color: model.selectionOperationMode == .subtract ? .red : .green)
         }
 
         // 変形ハンドル（変形ツール・選択変形ツール・移動ツール）

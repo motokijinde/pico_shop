@@ -159,7 +159,7 @@ struct ToolbarView: View {
                 }
             }
 
-            if (model.selection != nil || model.tool.isSelectionTool || model.tool == .maskBrush || model.tool == .selectionTransform)
+            if (model.selection != nil || model.tool.isSelectionTool || model.tool == .selectionTransform)
                 && model.tool != .move && model.tool != .transform {
                 Divider().frame(height: 18)
                 selectionActions

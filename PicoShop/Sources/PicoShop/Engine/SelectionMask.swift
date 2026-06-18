@@ -1,6 +1,5 @@
 import Accelerate
 import CoreGraphics
-import SwiftUI
 
 /// キャンバス座標系の選択マスク（0–255、128 以上を「選択」とみなす）
 struct SelectionMask {
@@ -275,43 +274,49 @@ struct SelectionMask {
         data = buf
     }
 
-    // MARK: - マーチングアンツ用境界パス（キャンバス座標）
+    // MARK: - マーチングアンツ用境界ポリライン（キャンバス座標）
 
-    /// 選択境界のエッジを水平・垂直ランにまとめた Path を返す
-    func boundaryPath() -> Path {
-        var path = Path()
+    /// 選択境界のエッジを水平・垂直ランにまとめたポリライン列を返す
+    func boundaryPolylines(in bounds: CGRect?) -> [[CGPoint]] {
+        var lines: [[CGPoint]] = []
+        let ix0 = max(0, Int((bounds?.minX ?? 0).rounded(.down)))
+        let iy0 = max(0, Int((bounds?.minY ?? 0).rounded(.down)))
+        let ix1 = min(width - 1, Int(((bounds?.maxX ?? CGFloat(width)) - 1).rounded(.up)))
+        let iy1 = min(height - 1, Int(((bounds?.maxY ?? CGFloat(height)) - 1).rounded(.up)))
+        guard ix1 >= ix0, iy1 >= iy0 else { return lines }
+        let xEnd = min(width, ix1 + 1)
+        let yEnd = min(height, iy1 + 1)
+
         // 水平エッジ：行 y-1 と行 y の間
-        for y in 0...height {
+        for y in iy0...yEnd {
             var runStart: Int? = nil
-            for x in 0...width {
+            for x in ix0...xEnd {
                 let above = y > 0 && x < width && data[(y - 1) * width + x] >= 128
                 let below = y < height && x < width && data[y * width + x] >= 128
                 let isEdge = x < width && (above != below)
                 if isEdge {
                     if runStart == nil { runStart = x }
                 } else if let s = runStart {
-                    path.move(to: CGPoint(x: s, y: y))
-                    path.addLine(to: CGPoint(x: x, y: y))
+                    lines.append([CGPoint(x: s, y: y), CGPoint(x: x, y: y)])
                     runStart = nil
                 }
             }
         }
         // 垂直エッジ：列 x-1 と列 x の間
-        for x in 0...width {
+        for x in ix0...xEnd {
             var runStart: Int? = nil
-            for y in 0...height {
+            for y in iy0...yEnd {
                 let left = x > 0 && y < height && data[y * width + (x - 1)] >= 128
                 let right = x < width && y < height && data[y * width + x] >= 128
                 let isEdge = y < height && (left != right)
                 if isEdge {
                     if runStart == nil { runStart = y }
                 } else if let s = runStart {
-                    path.move(to: CGPoint(x: x, y: s))
-                    path.addLine(to: CGPoint(x: x, y: y))
+                    lines.append([CGPoint(x: x, y: s), CGPoint(x: x, y: y)])
                     runStart = nil
                 }
             }
         }
-        return path
+        return lines
     }
 }
