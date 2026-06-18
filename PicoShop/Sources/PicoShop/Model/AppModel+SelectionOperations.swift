@@ -6,8 +6,12 @@ extension AppModel {
 
     // MARK: 選択操作
 
-    func setSelection(_ mask: SelectionMask?, label: String) {
+    func setSelection(_ mask: SelectionMask?, label: String, preservesGrowShrinkAnchor: Bool = false) {
         guard commitPendingPixelTransformIfNeeded(preservesSelection: true) else { return }
+        if !preservesGrowShrinkAnchor {
+            growShrinkAnchor = nil
+            netGrowShrinkAmount = 0
+        }
         pushUndo(label)
         selection = (mask?.isEmpty ?? true) ? nil : mask
         pendingTransform = SelectionTransform()
@@ -67,6 +71,8 @@ extension AppModel {
         if selection == nil {
             return
         }
+        growShrinkAnchor = nil
+        netGrowShrinkAmount = 0
         pushUndo("選択をクリア")
         selection = nil
         pendingTransform = SelectionTransform()
@@ -80,7 +86,13 @@ extension AppModel {
             return
         }
         lastGrowShrinkAmount = px
-        setSelection(sel.grown(by: px), label: "選択範囲を拡大")
+        if growShrinkAnchor == nil {
+            growShrinkAnchor = sel
+            netGrowShrinkAmount = 0
+        }
+        netGrowShrinkAmount += px
+        let result = applyNetGrowShrink(anchor: growShrinkAnchor!)
+        setSelection(result, label: "選択範囲を拡大", preservesGrowShrinkAnchor: true)
     }
 
     func shrinkSelection(by px: Int) {
@@ -90,7 +102,23 @@ extension AppModel {
             return
         }
         lastGrowShrinkAmount = px
-        setSelection(sel.shrunk(by: px), label: "選択範囲を縮小")
+        if growShrinkAnchor == nil {
+            growShrinkAnchor = sel
+            netGrowShrinkAmount = 0
+        }
+        netGrowShrinkAmount -= px
+        let result = applyNetGrowShrink(anchor: growShrinkAnchor!)
+        setSelection(result, label: "選択範囲を縮小", preservesGrowShrinkAnchor: true)
+    }
+
+    private func applyNetGrowShrink(anchor: SelectionMask) -> SelectionMask {
+        if netGrowShrinkAmount > 0 {
+            return anchor.grown(by: netGrowShrinkAmount)
+        } else if netGrowShrinkAmount < 0 {
+            return anchor.shrunk(by: -netGrowShrinkAmount)
+        } else {
+            return anchor
+        }
     }
 
     // MARK: 選択範囲の変形
@@ -146,7 +174,7 @@ extension AppModel {
         let cw = canvasWidth, ch = canvasHeight
         let opts = colorRangeOpts
 
-        var mask = ColorRangeEngine.floodFill(
+        let mask = ColorRangeEngine.floodFill(
             pixels: layer.buffer.pixels, width: w, height: h,
             startX: lx, startY: ly,
             tolerance: Int(opts.level),

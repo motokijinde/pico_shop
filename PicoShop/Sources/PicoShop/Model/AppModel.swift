@@ -158,6 +158,11 @@ final class AppModel: ObservableObject {
     /// 選択範囲 拡大/縮小の最後に使った値（クイックメニュー用）
     @Published var lastGrowShrinkAmount: Int = 8
 
+    /// 拡大/縮小の起点となる選択範囲（連続操作時のずれ防止）
+    var growShrinkAnchor: SelectionMask? = nil
+    /// アンカーからの累積量（正=拡大、負=縮小）
+    var netGrowShrinkAmount: Int = 0
+
     // MARK: - アンドゥ / リドゥ
 
     struct Snapshot {
