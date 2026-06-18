@@ -159,7 +159,8 @@ struct ToolbarView: View {
                 }
             }
 
-            if model.selection != nil || model.tool.isSelectionTool || model.tool == .maskBrush || model.tool == .selectionTransform {
+            if (model.selection != nil || model.tool.isSelectionTool || model.tool == .maskBrush || model.tool == .selectionTransform)
+                && model.tool != .move && model.tool != .transform {
                 Divider().frame(height: 18)
                 selectionActions
             }
@@ -197,26 +198,11 @@ struct ToolbarView: View {
                     .font(.caption2.monospacedDigit())
                     .frame(width: 24, alignment: .trailing)
 
-                Text("境界")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 4)
-                Slider(value: $model.colorRangeOpts.boundaryAdjust, in: -10...10)
-                    .frame(width: 96)
-                    .help("境界調整: 左で縮小、右で拡大")
-                Text("\(Int(model.colorRangeOpts.boundaryAdjust))")
-                    .font(.caption2.monospacedDigit())
-                    .frame(width: 24, alignment: .trailing)
-
-                Toggle("隣接", isOn: $model.colorRangeOpts.contiguous)
+Toggle("隣接", isOn: $model.colorRangeOpts.contiguous)
                     .toggleStyle(.checkbox)
                     .controlSize(.small)
-                Button("再実行") { model.retryColorRangeSelection() }
-                    .disabled(model.colorRangeLastPoint == nil)
-                Button("リセット") {
-                    model.colorRangeOpts.level = 30
-                    model.colorRangeOpts.boundaryAdjust = 0
-                }
+                    .help("ONのとき、クリック点から隣接するピクセルのみ選択")
+
             }
         default:
             EmptyView()
@@ -275,15 +261,6 @@ struct ToolbarView: View {
 
     private var selectionActions: some View {
         HStack(spacing: 6) {
-            Button {
-                model.bwPreviewOn.toggle()
-            } label: {
-                Image(systemName: "circle.righthalf.filled")
-                    .frame(width: 22)
-            }
-            .disabled(model.selection == nil)
-            .help(model.bwPreviewOn ? "B&Wマスクプレビューを解除" : "B&Wマスクプレビュー")
-
             NumberField(label: "px", text: $growShrinkText, width: 42, labelWidth: 20) {
                 commitGrowShrinkPixels()
             }

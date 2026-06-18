@@ -41,43 +41,4 @@ enum ColorRangeEngine {
         return result
     }
 
-    /// 選択マスクの境界を調整する（4近傍）
-    /// amount > 0: Erosion（内側に amount px 削る）
-    /// amount < 0: Dilation（外側に |amount| px 広げる）
-    static func adjustBoundary(mask: inout [UInt8], width: Int, height: Int, amount: Int) {
-        guard amount != 0 else { return }
-        let count = width * height
-
-        if amount > 0 {
-            for _ in 0..<amount {
-                var toRemove = [Bool](repeating: false, count: count)
-                for y in 0..<height {
-                    for x in 0..<width {
-                        let i = y * width + x
-                        guard mask[i] >= 128 else { continue }
-                        if (y > 0        && mask[i - width] < 128) ||
-                           (y < height-1 && mask[i + width] < 128) ||
-                           (x > 0        && mask[i - 1]     < 128) ||
-                           (x < width-1  && mask[i + 1]     < 128) { toRemove[i] = true }
-                    }
-                }
-                for i in 0..<count where toRemove[i] { mask[i] = 0 }
-            }
-        } else {
-            for _ in 0..<(-amount) {
-                var toAdd = [Bool](repeating: false, count: count)
-                for y in 0..<height {
-                    for x in 0..<width {
-                        let i = y * width + x
-                        guard mask[i] < 128 else { continue }
-                        if (y > 0        && mask[i - width] >= 128) ||
-                           (y < height-1 && mask[i + width] >= 128) ||
-                           (x > 0        && mask[i - 1]     >= 128) ||
-                           (x < width-1  && mask[i + 1]     >= 128) { toAdd[i] = true }
-                    }
-                }
-                for i in 0..<count where toAdd[i] { mask[i] = 255 }
-            }
-        }
-    }
 }

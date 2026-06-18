@@ -14,7 +14,6 @@ final class AppModel: ObservableObject {
             selectionBounds = selection?.bounds()
             selectionPath = nil
             selectionVersion &+= 1
-            if selection == nil { bwPreviewOn = false }
             let ver = selectionVersion
             guard let sel = selection else { return }
             Task.detached(priority: .userInitiated) { [weak self] in
@@ -32,7 +31,6 @@ final class AppModel: ObservableObject {
     @Published var activeLayerID: UUID? {
         didSet {
             guard activeLayerID != oldValue else { return }
-            colorRangeLastPoint = nil
             refreshMoveTransformTargetForLayerChange()
         }
     }
@@ -65,7 +63,6 @@ final class AppModel: ObservableObject {
 
     @Published var tool: Tool = .rectSelect {
         didSet {
-            if tool != .colorRangeSelect { colorRangeLastPoint = nil }
             if oldValue == .selectionTransform && tool != .selectionTransform {
                 applySelectionTransform()
             }
@@ -152,8 +149,6 @@ final class AppModel: ObservableObject {
 
     /// 選択範囲：B&Wマスクプレビューフラグ
     @Published var bwPreviewOn = false
-    /// 色域選択：直前のクリック座標（再実行ボタン用）
-    @Published var colorRangeLastPoint: CGPoint?
 
     /// ルーペ：選択境界表示フラグ
     @Published var loupeShowSelection: Bool = true

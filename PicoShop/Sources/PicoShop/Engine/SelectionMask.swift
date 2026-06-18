@@ -1,3 +1,4 @@
+import Accelerate
 import CoreGraphics
 import SwiftUI
 
@@ -99,41 +100,53 @@ struct SelectionMask {
         return m
     }
 
-    /// 拡大（dilate）/ 縮小（erode）。4近傍を px 回反復
+    /// 拡大（dilate）: 円形カーネルで1パス処理
     func grown(by px: Int) -> SelectionMask {
-        var m = binarized()
-        for _ in 0..<max(0, px) {
-            var next = m.data
-            for y in 0..<height {
-                for x in 0..<width where m.data[y * width + x] < 128 {
-                    if m.isSelected(x: x - 1, y: y) || m.isSelected(x: x + 1, y: y)
-                        || m.isSelected(x: x, y: y - 1) || m.isSelected(x: x, y: y + 1) {
-                        next[y * width + x] = 255
-                    }
-                }
-            }
-            m.data = next
-        }
-        return m
+        guard px > 0 else { return binarized() }
+        return morphology(dilate: true, radius: px)
     }
 
     func shrunk(by px: Int) -> SelectionMask {
-        var m = binarized()
-        for _ in 0..<max(0, px) {
-            var next = m.data
-            for y in 0..<height {
-                for x in 0..<width where m.data[y * width + x] >= 128 {
-                    // 画像端は外側を非選択として扱う
-                    let edge = x == 0 || x == width - 1 || y == 0 || y == height - 1
-                    if edge || !m.isSelected(x: x - 1, y: y) || !m.isSelected(x: x + 1, y: y)
-                        || !m.isSelected(x: x, y: y - 1) || !m.isSelected(x: x, y: y + 1) {
-                        next[y * width + x] = 0
-                    }
+        guard px > 0 else { return binarized() }
+        return morphology(dilate: false, radius: px)
+    }
+
+    /// vImageDilate/Erode_Planar8 を使った円形カーネル形態学的演算（1パス・真円）
+    private func morphology(dilate: Bool, radius: Int) -> SelectionMask {
+        let src = binarized()
+        let kernelSize = radius * 2 + 1
+
+        // 円形カーネル（半径内なら1）
+        var kernel = [UInt8](repeating: 0, count: kernelSize * kernelSize)
+        let rSq = Float(radius) * Float(radius)
+        for ky in 0..<kernelSize {
+            for kx in 0..<kernelSize {
+                let dx = Float(kx - radius), dy = Float(ky - radius)
+                if dx * dx + dy * dy <= rSq { kernel[ky * kernelSize + kx] = 1 }
+            }
+        }
+
+        var result = [UInt8](repeating: 0, count: width * height)
+        src.data.withUnsafeBytes { srcBytes in
+            result.withUnsafeMutableBytes { dstBytes in
+                var srcBuf = vImage_Buffer(
+                    data: UnsafeMutableRawPointer(mutating: srcBytes.baseAddress!),
+                    height: vImagePixelCount(height),
+                    width: vImagePixelCount(width),
+                    rowBytes: width)
+                var dstBuf = vImage_Buffer(
+                    data: dstBytes.baseAddress!,
+                    height: vImagePixelCount(height),
+                    width: vImagePixelCount(width),
+                    rowBytes: width)
+                if dilate {
+                    vImageDilate_Planar8(&srcBuf, &dstBuf, 0, 0, kernel, vImagePixelCount(kernelSize), vImagePixelCount(kernelSize), vImage_Flags(kvImageEdgeExtend))
+                } else {
+                    vImageErode_Planar8(&srcBuf, &dstBuf, 0, 0, kernel, vImagePixelCount(kernelSize), vImagePixelCount(kernelSize), vImage_Flags(kvImageEdgeExtend))
                 }
             }
-            m.data = next
         }
-        return m
+        return SelectionMask(width: width, height: height, data: result)
     }
 
     func binarized() -> SelectionMask {

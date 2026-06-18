@@ -5,6 +5,7 @@ import SwiftUI
 private struct NavButton: View {
     let systemName: String
     let help: String
+    var isActive: Bool = false
     let action: () -> Void
     @State private var isHovered = false
 
@@ -13,7 +14,7 @@ private struct NavButton: View {
             Image(systemName: systemName)
                 .frame(width: 24, height: 22)
                 .background(
-                    isHovered ? Color.secondary.opacity(0.18) : Color.clear,
+                    isActive ? Color.accentColor.opacity(0.25) : isHovered ? Color.secondary.opacity(0.18) : Color.clear,
                     in: RoundedRectangle(cornerRadius: 4)
                 )
         }
@@ -74,6 +75,11 @@ struct NavigatorPanel: View {
                 HStack(spacing: 4) {
                     NavButton(systemName: "arrow.down.right.and.arrow.up.left", help: "全体表示") { model.fitToView() }
                     NavButton(systemName: "1.square", help: "等倍表示") { model.zoomActualSize() }
+                    NavButton(
+                        systemName: "circle.righthalf.filled",
+                        help: model.bwPreviewOn ? "B&Wマスクプレビューを解除" : "B&Wマスクプレビュー",
+                        isActive: model.bwPreviewOn
+                    ) { model.bwPreviewOn.toggle() }
                 }
             }
         }

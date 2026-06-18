@@ -139,7 +139,6 @@ enum SelectionOperationMode: String, CaseIterable, Identifiable {
 
 struct ColorRangeOptions {
     var level: Double = 30          // 1–100: クリック色との許容誤差
-    var boundaryAdjust: Double = 0  // -10（拡大）〜 +10（縮小）
     var contiguous: Bool = true
 }
 

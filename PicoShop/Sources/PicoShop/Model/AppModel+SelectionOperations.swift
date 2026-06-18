@@ -153,11 +153,6 @@ extension AppModel {
             contiguous: opts.contiguous
         )
 
-        let adj = Int(opts.boundaryAdjust.rounded())
-        if adj != 0 {
-            ColorRangeEngine.adjustBoundary(mask: &mask, width: w, height: h, amount: -adj)
-        }
-
         var canvasData = [UInt8](repeating: 0, count: cw * ch)
         for y in 0..<h {
             let cy = y + oy
@@ -170,13 +165,7 @@ extension AppModel {
         }
 
         let result = SelectionMask(width: cw, height: ch, data: canvasData)
-        colorRangeLastPoint = p
         applySelection(result, label: "色域選択")
-    }
-
-    func retryColorRangeSelection() {
-        guard let p = colorRangeLastPoint else { return }
-        applyColorRangeSelection(atCanvas: p)
     }
 
 }
